@@ -62,15 +62,15 @@ VahanGrid is designed to feel like a completely new, state-of-the-art product ra
    - Positioned specifically for the Indian electric mobility ecosystem (featuring Tata Power EZ Charge, Statiq, ChargeZone, Jio-bp pulse, and Kazam).
 
 2. **Clean Modular Project Structure:**
-   - Disassembled monolithic files into focused directories:
-     - `src/components/layout/` (Header, Sidebar, BottomNav)
-     - `src/components/map/` (LiveMap, MapLegend)
-     - `src/components/stations/` (StationCard, StationDetailsModal, StationFilterBar)
-     - `src/components/route/` (RoutePlanner, RouteSummaryCard)
-     - `src/components/charging/` (ActiveChargingModal, ChargingSessionCard)
-     - `src/components/wallet/` (VahanPassCard, QuickTopUp, TransactionList)
-     - `src/components/ai/` (AIChatbot, ChatSuggestions)
-   - Created dedicated page views under `src/pages/`:
+   - Disassembled monolithic files into focused directories under `frontend/`:
+     - `frontend/src/components/layout/` (Header, Sidebar, BottomNav)
+     - `frontend/src/components/map/` (LiveMap, MapLegend)
+     - `frontend/src/components/stations/` (StationCard, StationDetailsModal, StationFilterBar)
+     - `frontend/src/components/route/` (RoutePlanner, RouteSummaryCard)
+     - `frontend/src/components/charging/` (ActiveChargingModal, ChargingSessionCard)
+     - `frontend/src/components/wallet/` (VahanPassCard, QuickTopUp, TransactionList)
+     - `frontend/src/components/ai/` (AIChatbot, ChatSuggestions)
+   - Created dedicated page views under `frontend/src/pages/`:
      - `Dashboard/`
      - `Stations/`
      - `RoutePlanner/`
@@ -82,7 +82,7 @@ VahanGrid is designed to feel like a completely new, state-of-the-art product ra
 3. **Data Access Decoupling (Service Layer):**
    - In EVConnect, components made direct `fetch` calls to localhost endpoints with hardcoded fallbacks or directly imported `mockData.js`.
    - In VahanGrid, **zero visual components directly import mock data or make raw API queries**.
-   - Created a clean service layer under `src/services/`:
+   - Created a clean service layer under `frontend/src/services/`:
      - `stationService.js`
      - `routeService.js`
      - `walletService.js`
@@ -125,7 +125,7 @@ The following obsolete, hackathon-specific, or fake production code was explicit
 
 ## 5. What Remains Mock (Development Mock Data)
 
-The following items are currently mock data for UI validation and are clearly isolated in `src/data/mockData.js` and behind `src/services/`:
+The following items are currently mock data for UI validation and are clearly isolated in `frontend/src/data/mockData.js` and behind `frontend/src/services/`:
 
 | Feature | Mock Implementation in Phase 1 | Future Production Source |
 |---|---|---|

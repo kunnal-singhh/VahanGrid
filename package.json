@@ -1,24 +1,17 @@
 {
-  "name": "vahangrid",
-  "private": true,
+  "name": "vahangrid-monorepo",
   "version": "1.0.0",
-  "description": "VahanGrid — Unified EV Charging & Mobility Ecosystem for India",
-  "type": "module",
+  "description": "VahanGrid — Unified EV Charging & Mobility Ecosystem (monorepo root)",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "frontend": "npm run dev --prefix frontend",
+    "backend": "npm run dev --prefix backend",
+    "install:frontend": "npm install --prefix frontend",
+    "install:backend": "npm install --prefix backend",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "build:frontend": "npm run build --prefix frontend"
   },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.0.0",
-    "lucide-react": "^1.16.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwindcss": "^4.0.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.2.0"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

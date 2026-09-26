@@ -16,7 +16,7 @@ VahanGrid is an open, unified electric vehicle charging and mobility platform ta
 | Phase 3 | Real station data, authentication, charging session APIs | ⏳ Planned |
 | Phase 4 | OCPI 2.2.1 roaming, OCPP 2.0.1 hardware, MQTT telemetry | ⏳ Planned |
 
-> ⚠️ This project is not production-ready. All station and session data is currently mock data in `src/data/mockData.js`.
+> ⚠️ This project is not production-ready. All station and session data is currently mock data in `frontend/src/data/mockData.js`.
 
 ---
 
@@ -55,39 +55,48 @@ VahanGrid is an open, unified electric vehicle charging and mobility platform ta
 
 ## 🗂️ Project Structure
 
+This is a **monorepo** — frontend and backend are sibling directories.
+
 ```
 VahanGrid/
-├── backend/                      # ← NEW in Phase 2A
+├── frontend/                     # React + Vite app (Phase 1)
+│   ├── src/
+│   │   ├── components/           # UI components (map, stations, wallet, …)
+│   │   ├── pages/                # Page-level views
+│   │   ├── services/             # Data access layer (mock now, real API Phase 2B)
+│   │   ├── data/mockData.js      # DEVELOPMENT MOCK DATA ONLY
+│   │   ├── utils/
+│   │   ├── App.jsx
+│   │   └── index.css             # Design tokens + glassmorphism
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── .env.example
+│   └── package.json
+│
+├── backend/                      # Node.js + Express API (Phase 2A)
 │   ├── src/
 │   │   ├── config/
-│   │   │   ├── env.js            # Load + validate environment
+│   │   │   ├── env.js            # Load + validate environment variables
 │   │   │   └── database.js       # PostgreSQL pool + query helper
 │   │   ├── routes/
 │   │   │   ├── index.js          # Mount all /api/v1/* routers
 │   │   │   └── health.js         # GET /api/v1/health
 │   │   ├── middleware/
-│   │   │   ├── errorHandler.js   # Centralized error formatting
+│   │   │   ├── errorHandler.js   # Centralized 4xx/5xx handling
 │   │   │   └── notFound.js       # 404 catch-all
 │   │   ├── app.js                # Express app (middleware + routing)
 │   │   └── server.js             # Startup, DB check, port binding
 │   ├── database/
 │   │   └── 001_enable_postgis.sql
 │   ├── .env.example
-│   └── README.md                 # Backend setup guide
+│   └── README.md                 # Backend setup guide (PostgreSQL + PostGIS)
+│
 ├── docs/
 │   ├── MIGRATION.md
 │   └── ROADMAP.md
-├── src/                          # Frontend (Phase 1 — unchanged)
-│   ├── components/
-│   ├── pages/
-│   ├── services/                 # Still uses mock data
-│   ├── data/mockData.js
-│   ├── utils/
-│   ├── App.jsx
-│   └── index.css
-├── .env.example
-├── package.json
-└── vite.config.js
+├── .gitignore                    # Root-level gitignore
+├── package.json                  # Root convenience scripts (npm run frontend/backend)
+└── README.md
 ```
 
 ---
@@ -97,32 +106,49 @@ VahanGrid/
 ### Prerequisites
 - Node.js v18+
 - npm v9+
-- PostgreSQL 14+ with PostGIS 3.3+
+- PostgreSQL 14+ with PostGIS 3.3+ *(backend only)*
 
-### Run the Frontend (Phase 1)
+### Option A — Run from root (convenience scripts)
+
 ```bash
-# From the project root
+# Install both frontend and backend dependencies
+npm run install:all
+
+# Start frontend dev server  →  http://localhost:5173
+npm run frontend
+
+# Start backend dev server   →  http://localhost:3001
+npm run backend
+```
+
+### Option B — Run each service directly
+
+```bash
+# Frontend
+cd frontend
 npm install
 npm run dev
 ```
-Visit `http://localhost:5173` — uses mock data, no backend required.
-
-### Run the Backend (Phase 2A)
-See [`backend/README.md`](./backend/README.md) for full PostgreSQL + PostGIS setup instructions.
 
 ```bash
-# From the backend/ directory
+# Backend (see backend/README.md for PostgreSQL setup first)
 cd backend
 npm install
-cp .env.example .env   # then edit .env with your DB credentials
+cp .env.example .env   # fill in DATABASE_URL
 npm run dev
 ```
 
-Test: `curl http://localhost:3001/api/v1/health`
+> The frontend works standalone with mock data — no backend required for UI development.
+
+### Test the API Health Endpoint
+```bash
+curl http://localhost:3001/api/v1/health
+```
 
 ### Build Frontend for Production
 ```bash
-npm run build
+npm run build:frontend
+# or: cd frontend && npm run build
 ```
 
 ---

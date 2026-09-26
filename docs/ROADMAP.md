@@ -32,7 +32,7 @@
 
 **Objective:** Extract valuable frontend patterns from the EVConnect prototype, establish clean modular architecture, rebrand to VahanGrid, and isolate all data behind typed asynchronous services.
 
-- [x] Create modular frontend structure (`src/components/`, `src/pages/`, `src/services/`, `src/utils/`, `src/data/`).
+- [x] Create modular frontend structure (`frontend/src/components/`, `frontend/src/pages/`, `frontend/src/services/`, `frontend/src/utils/`, `frontend/src/data/`).
 - [x] Complete rebranding to **VahanGrid** and **VahanPass**.
 - [x] Isolate development mock data behind `stationService`, `routeService`, `walletService`, `vehicleService`, `chargingService`, and `aiService`.
 - [x] Eliminate legacy hackathon popups, fake ML anomaly generators, and direct database queries from visual components.
@@ -60,7 +60,7 @@
      - `GET /api/v1/stations/:id`: Live station details and connector status.
      - `POST /api/v1/reservations`: Slot reservation and hold logic.
      - `GET /api/v1/vehicles`: Supported Indian vehicle library.
-   - Plug backend directly into `src/services/stationService.js` without altering UI components.
+   - Plug backend directly into `frontend/src/services/stationService.js` without altering UI components.
 
 3. **Legitimate Indian Data Ingestion:**
    - Ingest open datasets from the Bureau of Energy Efficiency (BEE) and OpenStreetMap (Overpass API).
