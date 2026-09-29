@@ -17,6 +17,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 
 import config from './config/env.js';
 import apiRoutes from './routes/index.js';
@@ -55,14 +56,19 @@ app.use(morgan(config.isDev ? 'dev' : 'combined'));
 app.use(express.json({ limit: '10kb' })); // Reject payloads > 10 KB
 app.use(express.urlencoded({ extended: false }));
 
-// ── 5. API routes ─────────────────────────────────────────────────────────────
+// ── 5. Cookie parsing ─────────────────────────────────────────────────────────
+// Required to read the HTTP-only JWT cookie set during login.
+// The cookie name is configured in config/env.js (cookie.name).
+app.use(cookieParser());
+
+// ── 6. API routes ─────────────────────────────────────────────────────────────
 app.use('/api/v1', apiRoutes);
 
-// ── 6. 404 catch-all ─────────────────────────────────────────────────────────
+// ── 7. 404 catch-all ─────────────────────────────────────────────────────────
 // Any request that did not match a route above falls through to here.
 app.use(notFound);
 
-// ── 7. Centralized error handler ─────────────────────────────────────────────
+// ── 8. Centralized error handler ─────────────────────────────────────────────
 // Must be registered LAST. Four-parameter signature tells Express it is an
 // error handler. Catches errors thrown in any route or middleware via next(err).
 app.use(errorHandler);
