@@ -649,3 +649,244 @@ Delete a vehicle. Returns `404` if not found or not owned.
 
 - **IDOR prevention**: every SQL query for a specific vehicle includes `AND user_id = $<authenticated_user_id>`. Even if a malformed request sends the wrong vehicle ID, the DB query returns 0 rows — not a 403, but a 404 (to avoid revealing existence of another user's resource).
 - **user_id in body is ignored**: the service always uses `req.user.id` from the verified JWT.
+
+---
+
+## 5. Charging Sessions API (Phase 3B.3)
+
+All session endpoints represent the application-level charging lifecycle in PostgreSQL.
+
+> **CRITICAL ARCHITECTURAL LIMITATION:**  
+> This phase implements application-level session management only. It does **not** communicate with real charger hardware or protocol engines (OCPP 2.0.1, OCPI 2.2.1, MQTT). Live telemetry (real-time energy delivery and dynamic billing) will be integrated in subsequent phases. `energy_kwh` and `cost_amount` remain at schema defaults until charger hardware communication is active.
+
+### Authentication
+All session endpoints require authentication via:
+- HTTP-only cookie `vg_token`, OR
+- Header `Authorization: Bearer <token>`
+
+---
+
+### `POST /api/v1/sessions/start`
+
+Initiates an active charging session on an available connector using an owned vehicle.
+
+#### Request Body
+```json
+{
+  "connector_id": "c1000001-0000-0000-0000-000000000007",
+  "vehicle_id": "7d195f39-df2f-48e3-8637-6b934e984539"
+}
+```
+
+#### Pre-conditions Enforced:
+1. User is authenticated (`req.user.id`).
+2. Vehicle exists and belongs to the authenticated user.
+3. Connector exists and is attached to a valid EVSE & location hierarchy.
+4. Connector status is `'available'`.
+5. Authenticated user does not already have an active/pending session.
+6. Connector does not already have an active/pending session.
+7. Atomic row-lock (`SELECT FOR UPDATE`) prevents concurrent double-booking.
+8. On success, sets connector status to `'charging'` and creates a session with status `'active'`.
+
+#### Response `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+    "user_id": "b0000001-0000-0000-0000-000000000001",
+    "vehicle_id": "7d195f39-df2f-48e3-8637-6b934e984539",
+    "connector_id": "c1000001-0000-0000-0000-000000000007",
+    "started_at": "2026-09-29T13:06:10.123Z",
+    "ended_at": null,
+    "start_soc": null,
+    "end_soc": null,
+    "energy_kwh": 0,
+    "duration_seconds": 0,
+    "cost_amount": 0,
+    "currency": "INR",
+    "status": "active",
+    "external_session_id": null,
+    "created_at": "2026-09-29T13:06:10.123Z",
+    "updated_at": "2026-09-29T13:06:10.123Z",
+    "vehicle": {
+      "id": "7d195f39-df2f-48e3-8637-6b934e984539",
+      "manufacturer": "Tata",
+      "model": "Nexon EV",
+      "variant": null,
+      "battery_capacity_kwh": 40.5,
+      "connector_type": "CCS2"
+    },
+    "connector": {
+      "id": "c1000001-0000-0000-0000-000000000007",
+      "connector_id": "1",
+      "standard": "CCS2",
+      "format": "cable",
+      "power_type": "DC",
+      "max_power_kw": 60,
+      "status": "charging"
+    },
+    "evse": {
+      "id": "e1000001-0000-0000-0000-000000000005",
+      "evse_uid": "IN*STATIQ*E01",
+      "evse_code": "BLR-KOR-01",
+      "max_power_kw": 60,
+      "physical_reference": "Bay 1"
+    },
+    "location": {
+      "id": "f0000001-0000-0000-0000-000000000002",
+      "name": "Koramangala Tech Park Hub",
+      "address_line1": "80 Feet Road, 4th Block, Koramangala",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "latitude": 12.9352,
+      "longitude": 77.6245
+    },
+    "cpo": {
+      "id": "a0000001-0000-0000-0000-000000000002",
+      "name": "Statiq EV",
+      "short_code": "STATIQ"
+    }
+  }
+}
+```
+
+| Status | `error.code` | Cause |
+|---|---|---|
+| `400` | `VALIDATION_ERROR` | Missing `connector_id` or `vehicle_id` |
+| `400` | `INVALID_UUID` | Invalid UUID format |
+| `401` | `MISSING_TOKEN` | Not authenticated |
+| `403` | `VEHICLE_NOT_OWNED` | Vehicle does not belong to the user |
+| `404` | `VEHICLE_NOT_FOUND` | Vehicle does not exist |
+| `404` | `CONNECTOR_NOT_FOUND` | Connector does not exist |
+| `409` | `CONNECTOR_UNAVAILABLE` | Connector is not in 'available' status |
+| `409` | `SESSION_ALREADY_ACTIVE` | User already has an active session |
+| `409` | `CONNECTOR_IN_USE` | Connector is occupied by another session |
+| `409` | `CONCURRENCY_CONFLICT` | Concurrent race condition detected |
+
+---
+
+### `GET /api/v1/sessions/active`
+
+Returns the current active or pending charging session for the authenticated user with nested hierarchy.
+
+#### Response `200 OK` (Active session exists)
+```json
+{
+  "success": true,
+  "data": {
+    "id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+    "user_id": "b0000001-0000-0000-0000-000000000001",
+    "status": "active",
+    "started_at": "2026-09-29T13:06:10.123Z",
+    "vehicle": { ... },
+    "connector": { ... },
+    "evse": { ... },
+    "location": { ... },
+    "cpo": { ... }
+  }
+}
+```
+
+#### Response `200 OK` (No active session)
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+---
+
+### `GET /api/v1/sessions`
+
+Lists all charging sessions belonging to the authenticated user, newest first.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+      "user_id": "b0000001-0000-0000-0000-000000000001",
+      "vehicle_id": "7d195f39-df2f-48e3-8637-6b934e984539",
+      "connector_id": "c1000001-0000-0000-0000-000000000007",
+      "started_at": "2026-09-29T13:06:10.123Z",
+      "ended_at": "2026-09-29T13:16:10.123Z",
+      "start_soc": null,
+      "end_soc": null,
+      "energy_kwh": 0,
+      "duration_seconds": 600,
+      "cost_amount": 0,
+      "currency": "INR",
+      "status": "stopped",
+      "station_name": "Koramangala Tech Park Hub",
+      "station_city": "Bengaluru",
+      "connector_standard": "CCS2",
+      "vehicle_model": "Nexon EV"
+    }
+  ],
+  "meta": {
+    "count": 1
+  }
+}
+```
+
+---
+
+### `GET /api/v1/sessions/:id`
+
+Retrieves a single charging session by ID with full nested details.
+
+#### Response `200 OK`
+Returns the session object with nested `vehicle`, `connector`, `evse`, `location`, and `cpo`.
+
+| Status | `error.code` | Cause |
+|---|---|---|
+| `400` | `INVALID_UUID` | `:id` is not a valid UUID |
+| `401` | `MISSING_TOKEN` | Not authenticated |
+| `404` | `SESSION_NOT_FOUND` | Session not found or owned by a different user |
+
+---
+
+### `POST /api/v1/sessions/:id/stop`
+
+Stops an active charging session owned by the authenticated user.
+
+#### Effects:
+1. Verifies the session exists, belongs to the authenticated user, and is currently `active` or `pending`.
+2. Updates `charging_sessions`:
+   - `status = 'stopped'`
+   - `ended_at = CURRENT_TIMESTAMP`
+   - `duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))`
+3. Updates `connectors`:
+   - `status = 'available'` (releasing the connector for other drivers).
+4. Returns the updated session object with rich details.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+    "status": "stopped",
+    "started_at": "2026-09-29T13:06:10.123Z",
+    "ended_at": "2026-09-29T13:16:10.123Z",
+    "duration_seconds": 600,
+    "energy_kwh": 0,
+    "cost_amount": 0,
+    "connector": {
+      "status": "available"
+    }
+  }
+}
+```
+
+| Status | `error.code` | Cause |
+|---|---|---|
+| `400` | `INVALID_UUID` | `:id` is not a valid UUID |
+| `401` | `MISSING_TOKEN` | Not authenticated |
+| `404` | `SESSION_NOT_FOUND` | Session not found or owned by a different user |
+| `409` | `SESSION_ALREADY_STOPPED` | Session is already stopped, completed, or cancelled |
+

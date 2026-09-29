@@ -2,7 +2,7 @@
 
 > Node.js + Express API server and PostgreSQL/PostGIS database for the VahanGrid unified EV charging platform.
 
-**Status: Phase 2B Complete — Core Database Schema & Migrations**
+**Status: Phase 3B.3 Complete — Charging Session Lifecycle REST API**
 
 ---
 
@@ -225,6 +225,27 @@ curl "http://localhost:3001/api/v1/stations/nearby?lat=28.6315&lng=77.2167"
 curl "http://localhost:3001/api/v1/stations/nearby?lat=28.6315&lng=77.2167&radius_km=50"
 ```
 
+#### 5. Charging Sessions (Phase 3B.3)
+All session endpoints require authentication (`vg_token` cookie or `Authorization: Bearer <token>`).
+```bash
+# Start session
+curl -X POST http://localhost:3001/api/v1/sessions/start \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"connector_id":"<uuid>","vehicle_id":"<uuid>"}'
+
+# Get current active session
+curl http://localhost:3001/api/v1/sessions/active -H "Authorization: Bearer <token>"
+
+# List session history
+curl http://localhost:3001/api/v1/sessions -H "Authorization: Bearer <token>"
+
+# Stop active session
+curl -X POST http://localhost:3001/api/v1/sessions/<session-id>/stop -H "Authorization: Bearer <token>"
+```
+
+> **Note on Hardware Communication:** Phase 3B.3 handles application-level session lifecycle only. It does not communicate with physical EV chargers or protocol engines (OCPP, OCPI, MQTT). Real telemetry will be added in subsequent phases.
+
 For full request/response schemas and error codes, see [`docs/API.md`](../docs/API.md).
 
 ---
@@ -241,21 +262,35 @@ backend/
 │   │   ├── env.js               # Environment validator
 │   │   └── database.js          # PostgreSQL connection pool (pg.Pool)
 │   ├── controllers/
-│   │   └── stationController.js # Station route handlers & parameter validation
+│   │   ├── authController.js    # Auth handlers (register, login, logout, me)
+│   │   ├── userController.js    # Profile handlers (/users/me)
+│   │   ├── vehicleController.js # Vehicle CRUD handlers (/vehicles)
+│   │   ├── sessionController.js # Session lifecycle handlers (/sessions)
+│   │   └── stationController.js # Station route handlers & spatial validation
 │   ├── services/
-│   │   └── stationService.js    # Data access layer & PostGIS queries
+│   │   ├── authService.js       # Auth queries & password verification
+│   │   ├── userService.js       # User profile queries
+│   │   ├── vehicleService.js    # Vehicle queries & ownership checks
+│   │   ├── sessionService.js    # Session lifecycle & atomic transactions
+│   │   └── stationService.js    # PostGIS spatial queries
 │   ├── middleware/
+│   │   ├── authenticate.js      # JWT authentication middleware
 │   │   ├── errorHandler.js      # Centralized error handler
 │   │   └── notFound.js          # 404 handler
 │   ├── routes/
 │   │   ├── index.js             # API v1 router registry
+│   │   ├── auth.js              # Auth routes (/api/v1/auth)
+│   │   ├── users.js             # User routes (/api/v1/users)
+│   │   ├── vehicles.js          # Vehicle routes (/api/v1/vehicles)
+│   │   ├── sessions.js          # Session routes (/api/v1/sessions)
 │   │   ├── health.js            # GET /api/v1/health
-│   │   └── stations.js          # GET /api/v1/stations (/, /:id, /nearby)
+│   │   └── stations.js          # Station routes (/api/v1/stations)
 │   ├── scripts/
 │   │   ├── migrate.js           # Zero-ORM SQL migration runner
 │   │   ├── seed.js              # Seed data runner
-│   │   └── verify.js            # Automated schema & PostGIS validator
-│   ├── app.js                   # Express application setup (Helmet, CORS, Morgan)
+│   │   ├── verify.js            # Automated schema & PostGIS validator
+│   │   └── test_phase3b3.js     # Phase 3B.3 session lifecycle verification suite
+│   ├── app.js                   # Express application setup
 │   └── server.js                # Server entry point
 ├── .env.example
 ├── .gitignore

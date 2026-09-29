@@ -4,11 +4,11 @@
  * JWT authentication middleware for VahanGrid.
  *
  * How it works:
- * 1. Reads the JWT from the HTTP-only cookie (config.cookie.name).
+ * 1. Reads the JWT from the HTTP-only cookie (config.cookie.name) or Authorization header.
  * 2. Verifies the token signature and expiry using the JWT_SECRET.
  * 3. Loads the user record from PostgreSQL (ensures user still exists and is active).
  * 4. Attaches the user to req.user so downstream handlers can use it.
- * 5. Returns 401 for any authentication failure — missing cookie, bad signature,
+ * 5. Returns 401 for any authentication failure - missing cookie, bad signature,
  *    expired token, or user no longer in the database.
  *
  * Security notes:
@@ -27,7 +27,11 @@ import { getUserById } from '../services/authService.js';
  */
 export async function authenticate(req, res, next) {
   try {
-    const token = req.cookies?.[config.cookie.name];
+    const token =
+      req.cookies?.[config.cookie.name] ||
+      (req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7)
+        : null);
 
     if (!token) {
       return res.status(401).json({
@@ -56,7 +60,7 @@ export async function authenticate(req, res, next) {
       });
     }
 
-    // Load the user from the database — do not trust the payload alone.
+    // Load the user from the database - do not trust the payload alone.
     // This rejects tokens for deleted/suspended accounts.
     const user = await getUserById(payload.sub);
     if (!user) {

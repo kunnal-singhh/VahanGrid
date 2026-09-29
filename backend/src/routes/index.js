@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/routes/index.js
  *
  * API v1 route registry.
@@ -15,6 +15,7 @@ import stationsRouter from './stations.js';
 import authRouter     from './auth.js';
 import usersRouter    from './users.js';
 import vehiclesRouter from './vehicles.js';
+import sessionsRouter from './sessions.js';
 
 // -- Future imports (uncomment as each phase is implemented) ------------------
 // import chargingRouter from './charging.js';
@@ -28,6 +29,7 @@ router.use('/stations', stationsRouter);
 router.use('/auth',     authRouter);
 router.use('/users',    usersRouter);
 router.use('/vehicles', vehiclesRouter);
+router.use('/sessions', sessionsRouter);
 
 // -- Future routes (Phase 3C onward) ------------------------------------------
 // router.use('/charging', chargingRouter);
