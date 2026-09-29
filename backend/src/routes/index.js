@@ -16,10 +16,10 @@ import authRouter     from './auth.js';
 import usersRouter    from './users.js';
 import vehiclesRouter from './vehicles.js';
 import sessionsRouter from './sessions.js';
+import walletRouter   from './wallet.js';
 
 // -- Future imports (uncomment as each phase is implemented) ------------------
 // import chargingRouter from './charging.js';
-// import walletRouter   from './wallet.js';
 
 const router = Router();
 
@@ -30,9 +30,9 @@ router.use('/auth',     authRouter);
 router.use('/users',    usersRouter);
 router.use('/vehicles', vehiclesRouter);
 router.use('/sessions', sessionsRouter);
+router.use('/wallet',   walletRouter);
 
-// -- Future routes (Phase 3C onward) ------------------------------------------
+// -- Future routes --------------------------------------------------------
 // router.use('/charging', chargingRouter);
-// router.use('/wallet',   walletRouter);
 
 export default router;
