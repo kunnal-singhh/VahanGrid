@@ -1,4 +1,5 @@
-import { Menu, Zap, Sun, Moon, Search, X } from 'lucide-react';
+import { Menu, Sun, Moon, Search, X, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Header({
   activePage,
@@ -14,7 +15,20 @@ export default function Header({
   searchQuery,
   onSearchChange,
   showSearch = false,
+  onNavigate,
 }) {
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'VG';
+
   return (
     <header
       className={`h-16 shrink-0 flex items-center justify-between px-4 md:px-6 border-b transition-colors duration-200 z-40 ${
@@ -111,11 +125,39 @@ export default function Header({
         </button>
 
         {/* Driver Profile Badge */}
-        <div className="flex items-center gap-2 pl-1">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 via-indigo-500 to-emerald-500 flex items-center justify-center text-xs font-black text-white shadow-md shadow-sky-500/20">
-            VG
+        {isAuthenticated ? (
+          <div className="flex items-center gap-1.5 pl-1" id="header-user-badge">
+            <button
+              onClick={() => onNavigate && onNavigate('profile')}
+              title={`Logged in as ${user?.name || user?.email}`}
+              className="flex items-center gap-2 p-1 rounded-xl hover:bg-white/[.04] transition-colors text-left cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 via-indigo-500 to-emerald-500 flex items-center justify-center text-xs font-black text-white shadow-md shadow-sky-500/20">
+                {initials}
+              </div>
+              <div className="hidden xl:block">
+                <p className="text-xs font-bold text-white truncate max-w-[120px]">{user?.name || 'Driver'}</p>
+                <p className="text-[9px] text-emerald-400 font-semibold leading-tight">Active</p>
+              </div>
+            </button>
+            <button
+              onClick={logout}
+              id="header-logout-btn"
+              title="Sign Out"
+              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => onNavigate && onNavigate('auth')}
+            id="header-signin-btn"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-400 to-emerald-400 text-slate-950 text-xs font-bold shadow-md shadow-sky-500/20 hover:opacity-95 transition-all cursor-pointer"
+          >
+            <span>Sign In</span>
+          </button>
+        )}
       </div>
     </header>
   );

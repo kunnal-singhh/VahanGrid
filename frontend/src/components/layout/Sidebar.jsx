@@ -11,8 +11,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Leaf,
-  Car
+  Car,
+  LogOut,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -38,6 +41,18 @@ export default function Sidebar({
   co2SavedKg = '85.4',
   activeChargingSession,
 }) {
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'VG';
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -170,6 +185,55 @@ export default function Sidebar({
               </span>
               <span className="text-sky-400 font-semibold">OCPI 2.2.1 Ready</span>
             </div>
+          </div>
+        )}
+
+        {/* User Account / Sign Out Section */}
+        {isAuthenticated ? (
+          <div className="p-3 border-t border-white/[.06]">
+            {sidebarOpen || mobileDrawerOpen ? (
+              <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-white/[.02]">
+                <div
+                  onClick={() => onNavigate('profile')}
+                  className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-400 to-emerald-400 flex items-center justify-center text-[11px] font-black text-white shrink-0 shadow-sm shadow-sky-500/20">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{user?.name || 'Driver'}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={logout}
+                  id="sidebar-logout-btn"
+                  title="Sign Out"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={logout}
+                title={`Sign Out (${user?.name})`}
+                className="w-full flex items-center justify-center py-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="p-3 border-t border-white/[.06]">
+            <button
+              onClick={() => onNavigate('auth')}
+              id="sidebar-signin-btn"
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 text-xs font-bold transition-all cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              {(sidebarOpen || mobileDrawerOpen) && <span>Sign In</span>}
+            </button>
           </div>
         )}
 

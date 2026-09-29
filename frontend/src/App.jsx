@@ -4,6 +4,9 @@ import Sidebar, { NAV_ITEMS } from './components/layout/Sidebar';
 import BottomNav from './components/layout/BottomNav';
 import StationDetailsModal from './components/stations/StationDetailsModal';
 import ActiveChargingModal from './components/charging/ActiveChargingModal';
+import AuthPage from './pages/Auth/AuthPage';
+import { useAuth } from './context/AuthContext';
+import { Zap } from 'lucide-react';
 
 // Pages
 import DashboardPage from './pages/Dashboard/DashboardPage';
@@ -22,11 +25,14 @@ import { vehicleService } from './services/vehicleService';
 import { chargingService } from './services/chargingService';
 
 export default function App() {
+  const { user, isAuthenticated, loading } = useAuth();
+
   const [theme, setTheme] = useState('dark');
   const [activePage, setActivePage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [isNetworkOnline, setIsNetworkOnline] = useState(true);
+  const [guestMode, setGuestMode] = useState(false);
 
   // Core Data States
   const [stations, setStations] = useState([]);
@@ -53,19 +59,23 @@ export default function App() {
   // Initial Data Fetch via Services
   useEffect(() => {
     async function loadInitialData() {
-      const [allStations, allVehicles, activeVeh, currentBal, allTx] = await Promise.all([
-        stationService.getStations(),
-        vehicleService.getVehicles(),
-        vehicleService.getActiveVehicle(),
-        walletService.getBalance(),
-        walletService.getTransactions(),
-      ]);
+      try {
+        const [allStations, allVehicles, activeVeh, currentBal, allTx] = await Promise.all([
+          stationService.getStations(),
+          vehicleService.getVehicles(),
+          vehicleService.getActiveVehicle(),
+          walletService.getBalance(),
+          walletService.getTransactions(),
+        ]);
 
-      setStations(allStations);
-      setVehicles(allVehicles);
-      setSelectedVehicle(activeVeh);
-      setBalance(currentBal);
-      setTransactions(allTx);
+        setStations(allStations || []);
+        setVehicles(allVehicles || []);
+        setSelectedVehicle(activeVeh);
+        setBalance(currentBal || 0);
+        setTransactions(allTx || []);
+      } catch (err) {
+        console.error('[App] Error loading initial service data:', err);
+      }
     }
     loadInitialData();
   }, []);
@@ -83,6 +93,11 @@ export default function App() {
 
   // Charging Session Handlers
   const handleStartCharge = useCallback(async (station) => {
+    if (!isAuthenticated) {
+      setGuestMode(false);
+      return;
+    }
+
     if (balance < 50) {
       alert('⚠️ Low VahanPass Balance. Please top up at least ₹50 to initiate charging.');
       return;
@@ -101,7 +116,7 @@ export default function App() {
     // Refresh station state
     const refreshed = await stationService.getStations();
     setStations(refreshed);
-  }, [balance, userSoc, isNetworkOnline]);
+  }, [balance, userSoc, isNetworkOnline, isAuthenticated]);
 
   const handleStopCharge = useCallback(async ({ cost, kwh, soc }) => {
     if (!activeChargingSession) return;
@@ -133,12 +148,16 @@ export default function App() {
 
   // Reservation Handlers
   const handleReserveStation = useCallback(async (station) => {
+    if (!isAuthenticated) {
+      setGuestMode(false);
+      return;
+    }
     await stationService.reserveSlot(station.id);
     const refreshed = await stationService.getStations();
     setStations(refreshed);
     setSelectedStation((prev) => (prev ? { ...prev, status: 'reserved', waitMin: 30 } : null));
     alert(`Slot confirmed at ${station.name}. Hold duration: 30 minutes.`);
-  }, []);
+  }, [isAuthenticated]);
 
   const handleCancelReservation = useCallback(async (station) => {
     await stationService.cancelReservation(station.id);
@@ -168,11 +187,50 @@ export default function App() {
     setRouteActive(false);
   }, []);
 
-  // Navigation Helper
+  // Navigation Helper with Route Protection
   const handleNavigate = (pageId) => {
+    if (pageId === 'auth') {
+      setGuestMode(false);
+      return;
+    }
+
+    const protectedPages = ['dashboard', 'charging', 'wallet', 'history', 'profile'];
+    if (!isAuthenticated && protectedPages.includes(pageId)) {
+      setGuestMode(false);
+      return;
+    }
+
     setActivePage(pageId);
     setMobileDrawerOpen(false);
   };
+
+  // ── 1. Initial Authentication Check Loading State (Avoid Flash) ──
+  if (loading) {
+    return (
+      <div className="h-screen w-screen bg-[#050711] flex flex-col items-center justify-center text-slate-200 select-none">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-400 via-indigo-500 to-emerald-400 p-[2px] shadow-2xl shadow-sky-500/30 animate-pulse mb-4">
+          <div className="w-full h-full bg-[#070c1d] rounded-[14px] flex items-center justify-center">
+            <Zap className="w-7 h-7 text-sky-400 fill-sky-400" />
+          </div>
+        </div>
+        <p className="text-xs font-semibold text-slate-400 tracking-widest uppercase animate-pulse">
+          Connecting to VahanGrid...
+        </p>
+      </div>
+    );
+  }
+
+  // ── 2. Unauthenticated UI: AuthPage unless user explicitly explores in guest mode ──
+  if (!isAuthenticated && !guestMode) {
+    return (
+      <AuthPage
+        onExploreGuest={() => {
+          setGuestMode(true);
+          setActivePage('stations');
+        }}
+      />
+    );
+  }
 
   // Find active nav metadata
   const currentNav = NAV_ITEMS.find((n) => n.id === activePage) || {
@@ -189,168 +247,192 @@ export default function App() {
 
   return (
     <div
-      className={`h-screen w-screen flex overflow-hidden transition-colors duration-200 ${
+      className={`h-screen w-screen flex flex-col overflow-hidden transition-colors duration-200 ${
         theme === 'light' ? 'bg-[#f8fafc] text-slate-900 light-theme' : 'bg-[#050711] text-slate-200'
       }`}
     >
-      {/* ─── Sidebar (Desktop) & Mobile Drawer ─── */}
-      <Sidebar
-        activePage={activePage}
-        onNavigate={handleNavigate}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        mobileDrawerOpen={mobileDrawerOpen}
-        onCloseMobileDrawer={() => setMobileDrawerOpen(false)}
-        theme={theme}
-        selectedVehicle={selectedVehicle}
-        vehicles={vehicles}
-        onSelectVehicle={(id) => {
-          const veh = vehicleService.setActiveVehicle(id);
-          setSelectedVehicle(veh);
-        }}
-        co2SavedKg={co2Total}
-        activeChargingSession={activeChargingSession}
-      />
+      {/* ─── Guest Mode Notice Banner ─── */}
+      {!isAuthenticated && guestMode && (
+        <div
+          id="guest-mode-banner"
+          className="bg-gradient-to-r from-sky-600 via-indigo-600 to-emerald-600 px-4 py-2 text-white flex items-center justify-between text-xs font-medium z-50 shrink-0 shadow-lg"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-300 animate-blink" />
+            <span className="font-semibold">Guest Mode</span>
+            <span className="hidden sm:inline text-sky-100">• Exploring Public Stations & Map</span>
+          </div>
+          <button
+            onClick={() => setGuestMode(false)}
+            id="btn-guest-signin"
+            className="px-3 py-1 rounded-lg bg-white text-slate-950 font-bold hover:bg-slate-100 transition-colors cursor-pointer text-[11px] shadow-sm"
+          >
+            Sign In / Register
+          </button>
+        </div>
+      )}
 
-      {/* ─── Main Content Canvas ─── */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-        {/* Top Header */}
-        <Header
-          activePage={activePage}
-          pageTitle={currentNav.label}
-          pageIcon={currentNav.icon}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          isNetworkOnline={isNetworkOnline}
-          onToggleNetwork={() => setIsNetworkOnline((v) => !v)}
-          activeChargingSession={activeChargingSession}
-          onOpenChargingSession={() => setShowChargingModal(true)}
-          onOpenMobileMenu={() => setMobileDrawerOpen(true)}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          showSearch={activePage === 'stations'}
-        />
-
-        {/* Dynamic Page Container */}
-        <main className="flex-1 overflow-y-auto relative">
-          {activePage === 'dashboard' && (
-            <DashboardPage
-              stations={stations}
-              onSelectStation={setSelectedStation}
-              onNavigate={handleNavigate}
-              selectedVehicle={selectedVehicle}
-              balance={balance}
-              co2SavedKg={co2Total}
-              userSoc={userSoc}
-              theme={theme}
-              activeChargingSession={activeChargingSession}
-              onOpenChargingSession={() => setShowChargingModal(true)}
-            />
-          )}
-
-          {activePage === 'stations' && (
-            <StationsPage
-              stations={stations}
-              selectedStation={selectedStation}
-              onSelectStation={setSelectedStation}
-              theme={theme}
-              filterOperator={filterOperator}
-              onOperatorChange={setFilterOperator}
-              filterStatus={filterStatus}
-              onStatusChange={setFilterStatus}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-            />
-          )}
-
-          {activePage === 'route' && (
-            <RoutePlannerPage
-              stations={stations}
-              routeActive={routeActive}
-              onPlanRoute={handlePlanRoute}
-              onClearRoute={handleClearRoute}
-              onStartCharge={handleStartCharge}
-              onSelectStation={setSelectedStation}
-              selectedStation={selectedStation}
-              userSoc={userSoc}
-              onSocChange={setUserSoc}
-              selectedVehicle={selectedVehicle}
-              theme={theme}
-              plannedRoutePath={plannedRoutePath}
-            />
-          )}
-
-          {activePage === 'charging' && (
-            <ChargingPage
-              activeChargingSession={activeChargingSession}
-              onOpenChargingSession={() => setShowChargingModal(true)}
-              onStopChargingSession={handleStopCharge}
-              stations={stations}
-              onStartCharge={handleStartCharge}
-              onSelectStation={setSelectedStation}
-            />
-          )}
-
-          {activePage === 'wallet' && (
-            <WalletPage
-              balance={balance}
-              transactions={transactions}
-              onTopUp={handleTopUp}
-            />
-          )}
-
-          {activePage === 'history' && (
-            <HistoryPage transactions={transactions} />
-          )}
-
-          {activePage === 'profile' && (
-            <ProfilePage
-              selectedVehicle={selectedVehicle}
-              onSelectVehicle={(id) => {
-                const veh = vehicleService.setActiveVehicle(id);
-                setSelectedVehicle(veh);
-              }}
-            />
-          )}
-
-          {activePage === 'ai' && (
-            <div className="p-4 md:p-6 max-w-4xl mx-auto pb-20 md:pb-8">
-              <AIChatbot
-                userSoc={userSoc}
-                selectedVehicle={selectedVehicle}
-                balance={balance}
-              />
-            </div>
-          )}
-        </main>
-
-        {/* ─── Mobile Bottom Navigation ─── */}
-        <BottomNav
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* ─── Sidebar (Desktop) & Mobile Drawer ─── */}
+        <Sidebar
           activePage={activePage}
           onNavigate={handleNavigate}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          mobileDrawerOpen={mobileDrawerOpen}
+          onCloseMobileDrawer={() => setMobileDrawerOpen(false)}
           theme={theme}
+          selectedVehicle={selectedVehicle}
+          vehicles={vehicles}
+          onSelectVehicle={(id) => {
+            const veh = vehicleService.setActiveVehicle(id);
+            setSelectedVehicle(veh);
+          }}
+          co2SavedKg={co2Total}
           activeChargingSession={activeChargingSession}
         />
 
-        {/* ─── Global Station Details Modal ─── */}
-        {selectedStation && (
-          <StationDetailsModal
-            station={selectedStation}
-            onClose={() => setSelectedStation(null)}
-            onStartCharge={handleStartCharge}
-            onReserve={handleReserveStation}
-            onCancelReservation={handleCancelReservation}
-            isCharging={!!activeChargingSession}
+        {/* ─── Main Content Canvas ─── */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+          {/* Top Header */}
+          <Header
+            activePage={activePage}
+            pageTitle={currentNav.label}
+            pageIcon={currentNav.icon}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            isNetworkOnline={isNetworkOnline}
+            onToggleNetwork={() => setIsNetworkOnline((v) => !v)}
+            activeChargingSession={activeChargingSession}
+            onOpenChargingSession={() => setShowChargingModal(true)}
+            onOpenMobileMenu={() => setMobileDrawerOpen(true)}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            showSearch={activePage === 'stations'}
+            onNavigate={handleNavigate}
           />
-        )}
 
-        {/* ─── Global Active Charging Modal ─── */}
-        {showChargingModal && activeChargingSession && (
-          <ActiveChargingModal
-            session={activeChargingSession}
-            onStop={handleStopCharge}
+          {/* Dynamic Page Container */}
+          <main className="flex-1 overflow-y-auto relative">
+            {activePage === 'dashboard' && (
+              <DashboardPage
+                stations={stations}
+                onSelectStation={setSelectedStation}
+                onNavigate={handleNavigate}
+                selectedVehicle={selectedVehicle}
+                balance={balance}
+                co2SavedKg={co2Total}
+                userSoc={userSoc}
+                theme={theme}
+                activeChargingSession={activeChargingSession}
+                onOpenChargingSession={() => setShowChargingModal(true)}
+              />
+            )}
+
+            {activePage === 'stations' && (
+              <StationsPage
+                stations={stations}
+                selectedStation={selectedStation}
+                onSelectStation={setSelectedStation}
+                theme={theme}
+                filterOperator={filterOperator}
+                onOperatorChange={setFilterOperator}
+                filterStatus={filterStatus}
+                onStatusChange={setFilterStatus}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+              />
+            )}
+
+            {activePage === 'route' && (
+              <RoutePlannerPage
+                stations={stations}
+                routeActive={routeActive}
+                onPlanRoute={handlePlanRoute}
+                onClearRoute={handleClearRoute}
+                onStartCharge={handleStartCharge}
+                onSelectStation={setSelectedStation}
+                selectedStation={selectedStation}
+                userSoc={userSoc}
+                onSocChange={setUserSoc}
+                selectedVehicle={selectedVehicle}
+                theme={theme}
+                plannedRoutePath={plannedRoutePath}
+              />
+            )}
+
+            {activePage === 'charging' && (
+              <ChargingPage
+                activeChargingSession={activeChargingSession}
+                onOpenChargingSession={() => setShowChargingModal(true)}
+                onStopChargingSession={handleStopCharge}
+                stations={stations}
+                onStartCharge={handleStartCharge}
+                onSelectStation={setSelectedStation}
+              />
+            )}
+
+            {activePage === 'wallet' && (
+              <WalletPage
+                balance={balance}
+                transactions={transactions}
+                onTopUp={handleTopUp}
+              />
+            )}
+
+            {activePage === 'history' && (
+              <HistoryPage transactions={transactions} />
+            )}
+
+            {activePage === 'profile' && (
+              <ProfilePage
+                selectedVehicle={selectedVehicle}
+                onSelectVehicle={(id) => {
+                  const veh = vehicleService.setActiveVehicle(id);
+                  setSelectedVehicle(veh);
+                }}
+              />
+            )}
+
+            {activePage === 'ai' && (
+              <div className="p-4 md:p-6 max-w-4xl mx-auto pb-20 md:pb-8">
+                <AIChatbot
+                  userSoc={userSoc}
+                  selectedVehicle={selectedVehicle}
+                  balance={balance}
+                />
+              </div>
+            )}
+          </main>
+
+          {/* ─── Mobile Bottom Navigation ─── */}
+          <BottomNav
+            activePage={activePage}
+            onNavigate={handleNavigate}
+            theme={theme}
+            activeChargingSession={activeChargingSession}
           />
-        )}
+
+          {/* ─── Global Station Details Modal ─── */}
+          {selectedStation && (
+            <StationDetailsModal
+              station={selectedStation}
+              onClose={() => setSelectedStation(null)}
+              onStartCharge={handleStartCharge}
+              onReserve={handleReserveStation}
+              onCancelReservation={handleCancelReservation}
+              isCharging={!!activeChargingSession}
+            />
+          )}
+
+          {/* ─── Global Active Charging Modal ─── */}
+          {showChargingModal && activeChargingSession && (
+            <ActiveChargingModal
+              session={activeChargingSession}
+              onStop={handleStopCharge}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,43 +1,79 @@
-import { User, Car, ShieldCheck, CreditCard, Sparkles, CheckCircle2, ExternalLink } from 'lucide-react';
+import { User, Car, ShieldCheck, Sparkles, CheckCircle2, LogOut } from 'lucide-react';
 import { VEHICLES } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ProfilePage({
   selectedVehicle,
   onSelectVehicle,
 }) {
+  const { user, logout } = useAuth();
+
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'VG';
+
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('en-IN', {
+        month: 'short',
+        year: 'numeric',
+      })
+    : '2026';
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 animate-fade-in pb-20 md:pb-8">
       {/* Title */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] font-bold text-sky-400 uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
-            Driver & Fleet Settings
-          </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-widest bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
+              Driver & Fleet Settings
+            </span>
+          </div>
+          <h1 className="text-xl md:text-2xl font-black text-white">
+            Driver Profile & Vehicle Portfolio
+          </h1>
+          <p className="text-xs text-slate-300 mt-0.5">
+            Manage your electric vehicles, VahanPass roaming credentials, and account settings.
+          </p>
         </div>
-        <h1 className="text-xl md:text-2xl font-black text-white">
-          Driver Profile & Vehicle Portfolio
-        </h1>
-        <p className="text-xs text-slate-300 mt-0.5">
-          Manage your electric vehicles, VahanPass roaming credentials, and interoperability preferences.
-        </p>
+
+        {/* Logout Button */}
+        <button
+          onClick={logout}
+          id="btn-logout-profile"
+          className="self-start sm:self-auto flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 text-xs font-bold transition-all cursor-pointer shadow-lg shadow-rose-950/20"
+        >
+          <LogOut className="w-3.5 h-3.5 text-rose-400" />
+          <span>Sign Out</span>
+        </button>
       </div>
 
       {/* Driver Card */}
       <div className="glass rounded-3xl p-6 border border-white/[.08] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-400 via-indigo-500 to-emerald-400 flex items-center justify-center text-xl font-black text-white shadow-xl shadow-sky-500/20 shrink-0">
-            VG
+            {initials}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold text-white">VahanGrid EV Pilot</h2>
+              <h2 className="text-base font-extrabold text-white" id="profile-user-name">
+                {user?.name || 'VahanGrid EV Pilot'}
+              </h2>
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 VERIFIED DRIVER
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">driver.pilot@vahangrid.in • +91 98765 43210</p>
+            <p className="text-xs text-slate-400 mt-0.5" id="profile-user-contact">
+              {user?.email || 'driver.pilot@vahangrid.in'} {user?.phone ? `• ${user.phone}` : ''}
+            </p>
             <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
-              VahanPass RFID ID: RFID-VG-IN-889104
+              Driver ID: {user?.id || 'VG-LOCAL-PILOT'} • Member since {memberSince}
             </p>
           </div>
         </div>
@@ -103,12 +139,11 @@ export default function ProfilePage({
       {/* Architectural Principles Box */}
       <div className="glass rounded-3xl p-6 border border-white/[.08] space-y-3">
         <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-400" /> Phase 1 Architecture Principles
+          <Sparkles className="w-4 h-4 text-amber-400" /> VahanGrid Unified Architecture
         </h3>
         <p className="text-xs text-slate-300 leading-relaxed">
-          VahanGrid decouples the presentation layer from business logic and data access.
-          All stations and mock records are isolated behind <code className="text-sky-300">src/services/</code>.
-          Future phases will directly integrate PostgreSQL + PostGIS, OCPI 2.2.1 roaming endpoints, and OCPP 2.0.1 charger communication without altering visual React components.
+          Your profile is securely authenticated with PostgreSQL session management.
+          Live stations and geospatial route discovery are served directly from the PostGIS REST API layer.
         </p>
       </div>
     </div>
