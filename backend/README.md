@@ -1,20 +1,19 @@
 # VahanGrid Backend
 
-> Node.js + Express API server for the VahanGrid unified EV charging platform.
+> Node.js + Express API server and PostgreSQL/PostGIS database for the VahanGrid unified EV charging platform.
 
-**Phase 2A — Backend Foundation**  
-Status: PostgreSQL connectivity layer complete. No business API endpoints yet.
+**Status: Phase 2B Complete — Core Database Schema & Migrations**
 
 ---
 
 ## Architecture Position
 
 ```
-React (Vite)          ← Phase 1 — complete
+React (Vite)          ← Phase 1 — complete (frontend/)
     ↓
-Node.js + Express     ← This service (Phase 2A)
+Node.js + Express     ← Phase 2A — complete (backend/)
     ↓
-PostgreSQL + PostGIS   ← Database (Phase 2A setup)
+PostgreSQL + PostGIS   ← Phase 2B — complete (10 domain migrations + seeds)
     ↓
 (future)
 OCPP 2.0.1 / OCPI 2.2.1 / MQTT / Redis / Python ML
@@ -24,113 +23,43 @@ OCPP 2.0.1 / OCPI 2.2.1 / MQTT / Redis / Python ML
 
 ## Required Software
 
-| Tool | Version | Why |
-|---|---|---|
-| Node.js | ≥ 18 | Backend runtime |
-| npm | ≥ 9 | Package manager |
-| PostgreSQL | ≥ 14 | Relational database |
-| PostGIS | ≥ 3.3 | Geospatial extension for PostgreSQL |
+| Tool | Minimum Version | Installed | Purpose |
+|---|---|---|---|
+| Node.js | ≥ 18 | v22.14.0 | Backend runtime |
+| npm | ≥ 9 | 10.9.2 | Package manager |
+| PostgreSQL | ≥ 14 | 18.6 | Relational database engine |
+| PostGIS | ≥ 3.3 | 3.6.2 | Geospatial indexing & spatial functions |
 
 ---
 
-## 1. Install PostgreSQL and PostGIS
-
-### Windows
-
-Download the installer from https://www.postgresql.org/download/windows/
-
-During installation, **check the "Stack Builder" option** at the end.  
-Use Stack Builder to add **PostGIS** as a spatial extension.
-
-Alternatively, install with Chocolatey:
-```powershell
-# Install Chocolatey first if you don't have it (https://chocolatey.org)
-choco install postgresql --version=16 -y
-choco install postgis    -y
-```
-
-### macOS
-
-```bash
-brew install postgresql@16 postgis
-brew services start postgresql@16
-```
-
-### Ubuntu / Debian
-
-```bash
-sudo apt install postgresql postgresql-contrib postgis
-sudo systemctl start postgresql
-```
-
----
-
-## 2. Create the VahanGrid Database
+## 1. Database Creation
 
 Connect to PostgreSQL as the superuser (`postgres`):
 
 ```bash
-# On Windows (run in psql command prompt or pgAdmin)
-# On macOS/Linux:
 psql -U postgres
 ```
 
-Run these commands inside `psql`:
+Run inside `psql`:
 
 ```sql
--- Create a dedicated application user (replace 'your_password' with a real password)
-CREATE USER vahangrid_user WITH PASSWORD 'your_password';
+-- Create database
+CREATE DATABASE vahangrid;
 
--- Create the database
-CREATE DATABASE vahangrid_db OWNER vahangrid_user;
+-- Connect to the database
+\c vahangrid
 
--- Grant all privileges
-GRANT ALL PRIVILEGES ON DATABASE vahangrid_db TO vahangrid_user;
-
--- Exit
-\q
-```
-
-> **Why a dedicated user?**  
-> Running your app as the `postgres` superuser means a SQL injection bug could
-> drop or read any table in any database on the server. A minimal-privilege user
-> limits blast radius.
-
----
-
-## 3. Enable PostGIS
-
-Connect to the VahanGrid database:
-
-```bash
-psql -U postgres -d vahangrid_db
-```
-
-Run:
-
-```sql
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS postgis;
 
--- Verify it worked:
-SELECT postgis_version();
+-- Verify PostGIS installation
+SELECT postgis_full_version();
 ```
-
-Or run the provided SQL file:
-
-```bash
-psql -U postgres -d vahangrid_db -f database/001_enable_postgis.sql
-```
-
-> **Why PostGIS?**  
-> VahanGrid needs to answer queries like "find all charging stations within 30 km
-> of this GPS coordinate". Plain SQL stores lat/lng as plain numbers and forces
-> you to filter everything in application code. PostGIS adds native geometry
-> types, spatial indexes (GIST), and functions like `ST_DWithin` that make these
-> queries run in milliseconds even with millions of rows.
 
 ---
 
-## 4. Create the .env File
+## 2. Environment Configuration
 
 Copy the template:
 
@@ -138,80 +67,145 @@ Copy the template:
 cp .env.example .env
 ```
 
-Edit `.env` and fill in your values:
+Edit `.env`:
 
 ```env
 PORT=3001
 NODE_ENV=development
-DATABASE_URL=postgresql://vahangrid_user:your_password@localhost:5432/vahangrid_db
+DATABASE_URL=postgresql://postgres:<password>@localhost:5432/vahangrid
 FRONTEND_URL=http://localhost:5173
 ```
 
-**Never commit `.env`.** It is already listed in `.gitignore`.
+> **Git Safety:** Never commit `.env`. It is ignored in `.gitignore`.
 
 ---
 
-## 5. Install Dependencies
+## 3. Database Migrations (Phase 2B)
+
+VahanGrid uses a transparent, zero-ORM migration system located in `database/migrations/`.
+Migrations run in numbered chronological order, tracked in the `schema_migrations` table:
+
+| # | Migration File | Responsibility |
+|---|---|---|
+| 001 | `001_create_extensions.sql` | Enables `pgcrypto` (`gen_random_uuid()`) & `postgis` |
+| 002 | `002_create_users.sql` | Driver accounts, email/phone uniqueness, password placeholder |
+| 003 | `003_create_vehicles.sql` | Registered EVs, battery kWh & charging kW constraints |
+| 004 | `004_create_cpos.sql` | Charging network operators (Tata, Statiq, Jio-bp, etc.) |
+| 005 | `005_create_locations.sql` | Charging stations with `geography(Point, 4326)` & GIST index |
+| 006 | `006_create_evses.sql` | Charging kiosks/posts (location 1:N EVSEs) |
+| 007 | `007_create_connectors.sql` | Plugs/guns (CCS2, Type 2, Bharat DC-001, CHAdeMO) |
+| 008 | `008_create_wallets.sql` | 1:1 user VahanPass wallet (no editable balance column) |
+| 009 | `009_create_wallet_transactions.sql` | Signed immutable financial ledger (Credits +, Debits -) |
+| 010 | `010_create_charging_sessions.sql` | Charge Detail Records (CDRs) with SoC, energy, cost |
+
+### Run Migrations:
 
 ```bash
-# From the backend/ directory
-npm install
+# From backend/
+npm run migrate
+
+# Or from repository root:
+npm run db:migrate
 ```
 
-This installs:
-- `express` — HTTP server framework
-- `pg` — PostgreSQL driver (uses a connection pool)
-- `dotenv` — loads `.env` into `process.env`
-- `cors` — configures Cross-Origin Resource Sharing
-- `helmet` — sets security HTTP headers automatically
-- `morgan` — HTTP request logging
+---
+
+## 4. Development Seed Data
+
+Realistic Indian EV ecosystem seed data is located in `database/seeds/001_seed_development_data.sql`:
+- **5 CPOs:** Tata Power EZ Charge, Statiq, ChargeZone, Jio-bp pulse, Kazam EV
+- **4 Users & Registered Vehicles:** Tata Nexon EV Max, MG ZS EV, Mahindra XUV400, Hyundai Ioniq 5
+- **6 Locations:** Connaught Place (Delhi), BKC (Mumbai), Koramangala (Bengaluru), Mile 42 Food Mall (Mumbai-Pune Expressway), Cyber Hub (Gurugram), Electronic City (Bengaluru)
+- **9 EVSEs & 13 Connectors:** 150kW Ultra-Fast Dual CCS2, 120kW Fast Chargers, 60kW DC, 22kW AC Type-2, Bharat DC-001
+- **4 Wallets & 7 Ledger Transactions:** UPI top-ups, charging debits, mobility cashbacks
+- **4 Charging Sessions:** 3 historical completed sessions and 1 active in-progress session
+
+### Run Seeds:
+
+```bash
+# From backend/
+npm run seed
+
+# Or from repository root:
+npm run db:seed
+```
 
 ---
 
-## 6. Run the Backend
+## 5. Verify the Database
 
-### Development (auto-restarts on file save)
+Run the automated verification script:
 
 ```bash
+# From backend/
+npm run verify:db
+
+# Or from repository root:
+npm run db:verify
+```
+
+This verifies:
+1. All extensions (`postgis`, `pgcrypto`)
+2. All 9 domain tables
+3. Spatial column: `locations.location` is `geography(Point, 4326)`
+4. Spatial index: `idx_locations_location_gist` (`GIST`)
+5. Foreign keys and delete policies (`RESTRICT` on financial/session records, `CASCADE` on physical hierarchy)
+6. Unique constraints
+7. Numeric, SoC, and status `CHECK` constraints
+
+### Inspect Tables & Spatial Queries Manually in `psql`:
+
+```sql
+\c vahangrid
+
+-- 1. List all tables
+\dt
+
+-- 2. Inspect locations table spatial definition
+\d locations
+
+-- 3. Inspect spatial indexes
+\di *gist*
+
+-- 4. Verify PostGIS distance query (find stations within 50 km of Connaught Place, New Delhi)
+SELECT 
+  name, 
+  city, 
+  ROUND((ST_Distance(location, ST_SetSRID(ST_MakePoint(77.2167, 28.6315), 4326)::geography) / 1000.0)::numeric, 1) AS distance_km
+FROM locations
+WHERE ST_DWithin(location, ST_SetSRID(ST_MakePoint(77.2167, 28.6315), 4326)::geography, 50000)
+ORDER BY distance_km ASC;
+
+-- 5. Calculate true wallet balance from transaction ledger
+SELECT 
+  u.name,
+  w.currency,
+  COALESCE(SUM(t.amount), 0) AS balance
+FROM wallets w
+JOIN users u ON w.user_id = u.id
+LEFT JOIN wallet_transactions t ON t.wallet_id = w.id
+GROUP BY u.name, w.currency;
+```
+
+---
+
+## 6. Run the Backend API
+
+```bash
+# Development (with auto-reload)
 npm run dev
-```
 
-Node.js 18+ includes `--watch` mode natively — no nodemon needed.
-
-### Production
-
-```bash
+# Production
 npm start
 ```
 
-Expected startup output:
-
-```
-🔌 VahanGrid API — starting in development mode
-[startup] Checking database connection…
-[startup] ✅ PostgreSQL connected
-[startup] ✅ PostGIS extension detected
-[startup] ✅ HTTP server listening on http://localhost:3001
-[startup]    Health endpoint: http://localhost:3001/api/v1/health
-```
-
-If the database is unreachable, the server **exits immediately** with a clear
-message rather than starting in a broken state.
-
----
-
-## 7. Test the Health Endpoint
+### Test Health Endpoint:
 
 ```bash
-# Using curl
 curl http://localhost:3001/api/v1/health
-
-# Using PowerShell
-Invoke-RestMethod http://localhost:3001/api/v1/health | ConvertTo-Json
 ```
 
-**Healthy response (PostgreSQL connected + PostGIS enabled):**
-
+Expected response:
 ```json
 {
   "success": true,
@@ -219,73 +213,9 @@ Invoke-RestMethod http://localhost:3001/api/v1/health | ConvertTo-Json
   "status": "healthy",
   "database": "connected",
   "postgis": "enabled",
-  "timestamp": "2026-09-26T14:00:00.000Z"
+  "timestamp": "2026-09-29T01:24:25.939Z"
 }
 ```
-
-**Unhealthy response (database unreachable):**
-
-```json
-{
-  "success": false,
-  "service": "VahanGrid API",
-  "status": "unhealthy",
-  "database": "disconnected",
-  "error": "connect ECONNREFUSED 127.0.0.1:5432",
-  "timestamp": "2026-09-26T14:00:00.000Z"
-}
-```
-
----
-
-## 8. Test Unknown Routes
-
-Any URL that doesn't exist returns a structured 404 (not Express's default HTML):
-
-```bash
-curl http://localhost:3001/api/v1/nonexistent
-```
-
-```json
-{
-  "success": false,
-  "status": 404,
-  "message": "Route not found: GET /api/v1/nonexistent"
-}
-```
-
----
-
-## 9. Verify PostGIS
-
-After enabling PostGIS (`001_enable_postgis.sql`) and starting the backend,
-the health endpoint will show:
-
-```json
-"postgis": "enabled"
-```
-
-If you haven't run the SQL yet it shows:
-
-```json
-"postgis": "not yet enabled"
-```
-
----
-
-## Phase 2B — What Comes Next
-
-Phase 2B will design and implement the core PostgreSQL schema:
-
-- `users` — driver accounts
-- `vehicles` — EV models registered to users
-- `stations` — charging locations with PostGIS `geography` columns
-- `chargers` — individual connectors at a station
-- `charging_sessions` — CDR records
-- `wallet_transactions` — VahanPass balance movements
-
-Once the schema is stable, `stationService.js` in the frontend will be
-switched from mock data to real `GET /api/v1/stations` calls.
 
 ---
 
@@ -293,20 +223,36 @@ switched from mock data to real `GET /api/v1/stations` calls.
 
 ```
 backend/
+├── database/
+│   ├── migrations/
+│   │   ├── 001_create_extensions.sql
+│   │   ├── 002_create_users.sql
+│   │   ├── 003_create_vehicles.sql
+│   │   ├── 004_create_cpos.sql
+│   │   ├── 005_create_locations.sql
+│   │   ├── 006_create_evses.sql
+│   │   ├── 007_create_connectors.sql
+│   │   ├── 008_create_wallets.sql
+│   │   ├── 009_create_wallet_transactions.sql
+│   │   └── 010_create_charging_sessions.sql
+│   └── seeds/
+│       └── 001_seed_development_data.sql
 ├── src/
 │   ├── config/
-│   │   ├── env.js          # Load + validate environment variables
-│   │   └── database.js     # PostgreSQL connection pool + query helper
-│   ├── routes/
-│   │   ├── index.js        # Mount all /api/v1/* routers
-│   │   └── health.js       # GET /api/v1/health
+│   │   ├── env.js               # Environment validator
+│   │   └── database.js          # PostgreSQL connection pool (pg.Pool)
 │   ├── middleware/
-│   │   ├── errorHandler.js # Centralized 4xx/5xx responses
-│   │   └── notFound.js     # 404 catch-all
-│   ├── app.js              # Express app (middleware + routing)
-│   └── server.js           # Startup, DB check, port binding
-├── database/
-│   └── 001_enable_postgis.sql
+│   │   ├── errorHandler.js      # Error response sanitizer
+│   │   └── notFound.js          # 404 handler
+│   ├── routes/
+│   │   ├── index.js             # API v1 router
+│   │   └── health.js            # GET /api/v1/health
+│   ├── scripts/
+│   │   ├── migrate.js           # Zero-ORM SQL migration runner
+│   │   ├── seed.js              # Seed data runner
+│   │   └── verify.js            # Comprehensive schema & constraint validator
+│   ├── app.js                   # Express application setup
+│   └── server.js                # Server entry point
 ├── .env.example
 ├── .gitignore
 └── package.json

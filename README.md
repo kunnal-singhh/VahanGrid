@@ -11,12 +11,12 @@ VahanGrid is an open, unified electric vehicle charging and mobility platform ta
 | Phase | Description | Status |
 |---|---|---|
 | Phase 1 | React + Vite frontend UI/UX | ✅ Complete |
-| **Phase 2A** | **Node.js + Express backend foundation + PostgreSQL connectivity** | **✅ Complete** |
-| Phase 2B | Core database schema (users, stations, chargers, sessions) | 🔜 Next |
-| Phase 3 | Real station data, authentication, charging session APIs | ⏳ Planned |
+| Phase 2A | Node.js + Express backend foundation + PostgreSQL connectivity | ✅ Complete |
+| **Phase 2B** | **Core database schema (PostGIS, CPOs, Locations, EVSEs, Connectors, Wallets, Sessions)** | **✅ Complete** |
+| Phase 3 | Real station REST APIs, authentication, charging session APIs | 🔜 Next |
 | Phase 4 | OCPI 2.2.1 roaming, OCPP 2.0.1 hardware, MQTT telemetry | ⏳ Planned |
 
-> ⚠️ This project is not production-ready. All station and session data is currently mock data in `frontend/src/data/mockData.js`.
+> ⚠️ This project is in active development. The database schema and seed data are complete; REST APIs connecting the frontend will be built in Phase 3.
 
 ---
 
@@ -87,11 +87,13 @@ VahanGrid/
 │   │   ├── app.js                # Express app (middleware + routing)
 │   │   └── server.js             # Startup, DB check, port binding
 │   ├── database/
-│   │   └── 001_enable_postgis.sql
+│   │   ├── migrations/           # 10 numbered SQL schema migrations
+│   │   └── seeds/                # Realistic development seeds
 │   ├── .env.example
 │   └── README.md                 # Backend setup guide (PostgreSQL + PostGIS)
 │
 ├── docs/
+│   ├── DATABASE.md               # Domain model & schema specification
 │   ├── MIGRATION.md
 │   └── ROADMAP.md
 ├── .gitignore                    # Root-level gitignore
