@@ -199,23 +199,33 @@ npm run dev
 npm start
 ```
 
-### Test Health Endpoint:
+### Test Endpoints:
 
+#### 1. Health Check
 ```bash
 curl http://localhost:3001/api/v1/health
 ```
 
-Expected response:
-```json
-{
-  "success": true,
-  "service": "VahanGrid API",
-  "status": "healthy",
-  "database": "connected",
-  "postgis": "enabled",
-  "timestamp": "2026-09-29T01:24:25.939Z"
-}
+#### 2. Get All Stations (with nested CPO, EVSEs, and Connectors)
+```bash
+curl http://localhost:3001/api/v1/stations
 ```
+
+#### 3. Get Station by UUID
+```bash
+curl http://localhost:3001/api/v1/stations/f0000001-0000-0000-0000-000000000001
+```
+
+#### 4. Find Nearby Stations (PostGIS ST_DWithin radius search)
+```bash
+# 5 km default radius around Connaught Place, New Delhi
+curl "http://localhost:3001/api/v1/stations/nearby?lat=28.6315&lng=77.2167"
+
+# 50 km radius search
+curl "http://localhost:3001/api/v1/stations/nearby?lat=28.6315&lng=77.2167&radius_km=50"
+```
+
+For full request/response schemas and error codes, see [`docs/API.md`](../docs/API.md).
 
 ---
 
@@ -224,34 +234,28 @@ Expected response:
 ```
 backend/
 ├── database/
-│   ├── migrations/
-│   │   ├── 001_create_extensions.sql
-│   │   ├── 002_create_users.sql
-│   │   ├── 003_create_vehicles.sql
-│   │   ├── 004_create_cpos.sql
-│   │   ├── 005_create_locations.sql
-│   │   ├── 006_create_evses.sql
-│   │   ├── 007_create_connectors.sql
-│   │   ├── 008_create_wallets.sql
-│   │   ├── 009_create_wallet_transactions.sql
-│   │   └── 010_create_charging_sessions.sql
-│   └── seeds/
-│       └── 001_seed_development_data.sql
+│   ├── migrations/              # Numbered SQL migrations (001 - 010)
+│   └── seeds/                   # Development seed dataset
 ├── src/
 │   ├── config/
 │   │   ├── env.js               # Environment validator
 │   │   └── database.js          # PostgreSQL connection pool (pg.Pool)
+│   ├── controllers/
+│   │   └── stationController.js # Station route handlers & parameter validation
+│   ├── services/
+│   │   └── stationService.js    # Data access layer & PostGIS queries
 │   ├── middleware/
-│   │   ├── errorHandler.js      # Error response sanitizer
+│   │   ├── errorHandler.js      # Centralized error handler
 │   │   └── notFound.js          # 404 handler
 │   ├── routes/
-│   │   ├── index.js             # API v1 router
-│   │   └── health.js            # GET /api/v1/health
+│   │   ├── index.js             # API v1 router registry
+│   │   ├── health.js            # GET /api/v1/health
+│   │   └── stations.js          # GET /api/v1/stations (/, /:id, /nearby)
 │   ├── scripts/
 │   │   ├── migrate.js           # Zero-ORM SQL migration runner
 │   │   ├── seed.js              # Seed data runner
-│   │   └── verify.js            # Comprehensive schema & constraint validator
-│   ├── app.js                   # Express application setup
+│   │   └── verify.js            # Automated schema & PostGIS validator
+│   ├── app.js                   # Express application setup (Helmet, CORS, Morgan)
 │   └── server.js                # Server entry point
 ├── .env.example
 ├── .gitignore

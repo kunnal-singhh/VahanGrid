@@ -162,3 +162,13 @@ ORDER BY distance_km ASC;
 ```
 
 Thanks to the `idx_locations_location_gist` spatial index, this query uses a R-tree bounding box search in logarithmic time ($O(\log N)$) rather than a table scan.
+
+---
+
+## 6. Relationship with Phase 3A REST APIs
+
+The Phase 3A REST API (`/api/v1/stations`, `/api/v1/stations/:id`, `/api/v1/stations/nearby`) surfaces this database architecture directly to client applications:
+
+- **Entity Assembly:** Each `location` record is joined with its parent `cpo`, while its child `evses` and grandchild `connectors` are aggregated into structured JSON arrays in a single, high-performance parameterized query via PostgreSQL's `json_agg()`.
+- **Coordinate Transparency:** The PostGIS `geography` column is unpacked to standard JSON `latitude` and `longitude` numbers for map renderers (Leaflet).
+- **Spatial Acceleration:** The `/api/v1/stations/nearby` endpoint applies `ST_DWithin` and `ST_Distance` on `locations.location` to return proximity-ranked charging hubs without requiring client-side geometric calculations.

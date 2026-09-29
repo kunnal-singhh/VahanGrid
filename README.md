@@ -12,11 +12,12 @@ VahanGrid is an open, unified electric vehicle charging and mobility platform ta
 |---|---|---|
 | Phase 1 | React + Vite frontend UI/UX | ✅ Complete |
 | Phase 2A | Node.js + Express backend foundation + PostgreSQL connectivity | ✅ Complete |
-| **Phase 2B** | **Core database schema (PostGIS, CPOs, Locations, EVSEs, Connectors, Wallets, Sessions)** | **✅ Complete** |
-| Phase 3 | Real station REST APIs, authentication, charging session APIs | 🔜 Next |
+| Phase 2B | Core database schema (PostGIS, CPOs, Locations, EVSEs, Connectors, Wallets, Sessions) | ✅ Complete |
+| **Phase 3A** | **Station REST APIs (GET /stations, /:id, /nearby) & Frontend Integration** | **✅ Complete** |
+| Phase 3B | Authentication, driver vehicles & charging session REST APIs | 🔜 Next |
 | Phase 4 | OCPI 2.2.1 roaming, OCPP 2.0.1 hardware, MQTT telemetry | ⏳ Planned |
 
-> ⚠️ This project is in active development. The database schema and seed data are complete; REST APIs connecting the frontend will be built in Phase 3.
+> ⚡ **Phase 3A Live:** The frontend connects directly to PostgreSQL/PostGIS via Express REST APIs. Charging stations render real spatial data from the database.
 
 ---
 

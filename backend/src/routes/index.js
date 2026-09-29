@@ -15,12 +15,12 @@
 
 import { Router } from 'express';
 import healthRouter from './health.js';
+import stationsRouter from './stations.js';
 
 // ── Future imports (uncomment as each phase is implemented) ──────────────────
 // import authRouter     from './auth.js';
 // import usersRouter    from './users.js';
 // import vehiclesRouter from './vehicles.js';
-// import stationsRouter from './stations.js';
 // import chargingRouter from './charging.js';
 // import walletRouter   from './wallet.js';
 
@@ -28,12 +28,12 @@ const router = Router();
 
 // ── Registered routes ────────────────────────────────────────────────────────
 router.use('/health',   healthRouter);
+router.use('/stations', stationsRouter);
 
-// ── Future routes (Phase 2B onward) ─────────────────────────────────────────
+// ── Future routes (Phase 3B onward) ─────────────────────────────────────────
 // router.use('/auth',     authRouter);
 // router.use('/users',    usersRouter);
 // router.use('/vehicles', vehiclesRouter);
-// router.use('/stations', stationsRouter);
 // router.use('/charging', chargingRouter);
 // router.use('/wallet',   walletRouter);
 
