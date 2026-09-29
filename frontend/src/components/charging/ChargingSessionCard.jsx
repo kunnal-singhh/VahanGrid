@@ -1,8 +1,30 @@
-import { Zap, Clock, StopCircle, ArrowUpRight } from 'lucide-react';
-import { formatCurrency, formatKwh } from '../../utils/formatters';
+import { useState } from 'react';
+import { Zap, StopCircle, ArrowUpRight, Loader2 } from 'lucide-react';
 
 export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
+  const [isStopping, setIsStopping] = useState(false);
+
   if (!session) return null;
+
+  const stationName = session.location?.name || session.stationName || 'Charging Station';
+  const vehicleName = session.vehicle
+    ? `${session.vehicle.manufacturer} ${session.vehicle.model}`
+    : session.vehicleName || 'Registered EV';
+  const connectorStandard = session.connector?.standard || session.connectorStandard || 'CCS2';
+  const ratedPower = session.connector?.max_power_kw || session.power || 60;
+
+  const handleStop = async (e) => {
+    e.stopPropagation();
+    if (!onStop || isStopping) return;
+    try {
+      setIsStopping(true);
+      await onStop(session.id || session.sessionId);
+    } catch (err) {
+      console.error('[ChargingSessionCard] Stop failed:', err);
+    } finally {
+      setIsStopping(false);
+    }
+  };
 
   return (
     <div className="glass rounded-2xl p-4 md:p-5 border border-sky-500/30 bg-gradient-to-r from-sky-500/[.05] via-emerald-500/[.03] to-transparent relative overflow-hidden">
@@ -19,10 +41,10 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-blink" />
             </div>
             <h3 className="text-sm font-bold text-white truncate max-w-[280px]">
-              {session.stationName}
+              {stationName}
             </h3>
             <p className="text-[11px] text-slate-400">
-              Target: 80% • Rated Speed {session.power} kW
+              {connectorStandard} ({ratedPower} kW) • {vehicleName} • Waiting for charger telemetry
             </p>
           </div>
         </div>
@@ -37,11 +59,21 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
           </button>
 
           <button
-            onClick={() => onStop && onStop({ cost: 180, kwh: 10, soc: 80 })}
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 transition-colors flex items-center gap-1 cursor-pointer"
+            onClick={handleStop}
+            disabled={isStopping}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <StopCircle className="w-3.5 h-3.5" />
-            <span>Stop</span>
+            {isStopping ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Stopping...</span>
+              </>
+            ) : (
+              <>
+                <StopCircle className="w-3.5 h-3.5" />
+                <span>Stop</span>
+              </>
+            )}
           </button>
         </div>
       </div>

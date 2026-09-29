@@ -75,6 +75,38 @@ export default function DashboardPage({
         </div>
       </div>
 
+      {/* Active Session Spotlight Banner */}
+      {activeChargingSession && (
+        <div
+          onClick={onOpenChargingSession}
+          className="glass rounded-2xl p-4 border border-sky-500/40 bg-gradient-to-r from-sky-500/10 via-emerald-500/10 to-transparent flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-sky-500/60 transition-all shadow-lg shadow-sky-500/10 animate-fade-in"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+              <Zap className="w-5 h-5 fill-sky-400 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
+                  Active Charging Session
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-blink" />
+              </div>
+              <h3 className="text-sm font-bold text-white">
+                {activeChargingSession.location?.name || activeChargingSession.stationName || 'Charging Station'}
+              </h3>
+              <p className="text-[11px] text-slate-300">
+                Hardware connected • Click to monitor live status & stop session
+              </p>
+            </div>
+          </div>
+          <button className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center gap-1 self-end sm:self-center">
+            <span>View Session</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* 4 Core Ecosystem Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <div className="glass rounded-2xl p-4 border border-white/[.08]">

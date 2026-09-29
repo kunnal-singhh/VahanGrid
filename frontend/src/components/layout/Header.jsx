@@ -69,9 +69,9 @@ export default function Header({
             onClick={onOpenChargingSession}
             className="ml-2 flex items-center gap-1.5 bg-gradient-to-r from-sky-500/15 to-emerald-500/15 border border-sky-500/30 text-sky-300 px-3 py-1 rounded-full text-[11px] font-semibold hover:border-sky-500/50 transition-all cursor-pointer animate-pulse"
           >
-            <span className="w-2 h-2 rounded-full bg-sky-400 animate-blink" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-blink" />
             <span className="hidden sm:inline">Charging:</span>
-            <span>{activeChargingSession.currentSoc || activeChargingSession.startSoc}%</span>
+            <span>Active</span>
           </button>
         )}
       </div>

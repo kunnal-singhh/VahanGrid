@@ -1,4 +1,4 @@
-import { Zap, WifiOff, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Zap, ShieldCheck, Loader2 } from 'lucide-react';
 import ChargingSessionCard from '../../components/charging/ChargingSessionCard';
 import StationCard from '../../components/stations/StationCard';
 
@@ -7,8 +7,8 @@ export default function ChargingPage({
   onOpenChargingSession,
   onStopChargingSession,
   stations = [],
-  onStartCharge,
   onSelectStation,
+  isLoadingActive = false,
 }) {
   const availableStations = stations.filter((s) => s.status === 'available').slice(0, 3);
 
@@ -21,21 +21,26 @@ export default function ChargingPage({
             <Zap className="w-3 h-3" /> Live Charging Hub
           </span>
           <span className="text-[10px] font-semibold text-emerald-400">
-            OCPP 2.0.1 Ready
+            Real REST API Connected
           </span>
         </div>
 
         <h1 className="text-xl md:text-2xl font-black text-white">
-          EV Session Management & Diagnostics
+          EV Session Management & Lifecycle
         </h1>
         <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-          Monitor real-time energy delivery, power curves, voltage, and session costs.
-          Seamlessly plug and charge across all partner CPOs.
+          Monitor real-time session states, start charging on available station connectors,
+          and track session records stored directly in PostgreSQL.
         </p>
       </div>
 
       {/* Active Session Spotlight */}
-      {activeChargingSession ? (
+      {isLoadingActive ? (
+        <div className="glass rounded-2xl p-8 border border-white/[.08] text-center space-y-3">
+          <Loader2 className="w-6 h-6 animate-spin text-sky-400 mx-auto" />
+          <p className="text-xs text-slate-400">Checking charging session...</p>
+        </div>
+      ) : activeChargingSession ? (
         <div className="space-y-3">
           <h2 className="text-xs font-bold text-sky-400 uppercase tracking-wider">
             Current Ongoing Session
@@ -53,7 +58,7 @@ export default function ChargingPage({
           </div>
           <h3 className="text-sm font-bold text-white">No Active Charging Session</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Select an available charger from the list below or from the Live Map to begin session simulation.
+            Select an available charger from the list below or from the Live Map to begin charging.
           </p>
         </div>
       )}
@@ -65,7 +70,7 @@ export default function ChargingPage({
             <h2 className="text-xs font-bold text-white uppercase tracking-wider">
               Available Fast DC Chargers Nearby
             </h2>
-            <span className="text-[10px] text-slate-400">Instant Authorization</span>
+            <span className="text-[10px] text-slate-400">Select to View Connectors</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -73,7 +78,7 @@ export default function ChargingPage({
               <StationCard
                 key={station.id}
                 station={station}
-                onSelect={(st) => onStartCharge && onStartCharge(st)}
+                onSelect={(st) => onSelectStation && onSelectStation(st)}
               />
             ))}
           </div>

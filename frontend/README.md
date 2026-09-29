@@ -2,7 +2,7 @@
 
 > React 19 + Vite web client for the VahanGrid unified EV charging platform.
 
-**Status: Phase 3C.2 Complete — Frontend Vehicle Integration**
+**Status: Phase 3C.3 Complete — Frontend Charging Session Lifecycle Integration**
 
 ---
 
@@ -83,6 +83,26 @@ await vehicleService.updateVehicle(vehicleId, { variant: 'Dark Edition' });
 // Delete vehicle
 await vehicleService.deleteVehicle(vehicleId);
 ```
+
+### Charging Sessions (Phase 3C.3)
+```jsx
+import { chargingService } from '../services/chargingService';
+
+// Check for ongoing active session (restored on app startup / page refresh)
+const activeSession = await chargingService.getActiveSession();
+
+// Start session on selected connector with user vehicle
+const session = await chargingService.startChargingSession(connectorId, vehicleId);
+
+// Stop active session
+const stopped = await chargingService.stopChargingSession(session.id);
+
+// Fetch full session history
+const sessions = await chargingService.getSessions();
+```
+
+> **Telemetry Limitation Note**:
+> During Phase 3C.3, sessions track real lifecycle states (`active`, `stopped`), timestamps, duration, vehicles, and stations. Live energy metering (`energy_kwh`), power curves, and dynamic tariffs are awaiting real charger protocols (OCPP 2.0.1 / MQTT) in Phase 4.
 
 ---
 

@@ -136,60 +136,103 @@ export default function App() {
     }
   }, [theme]);
 
-  // Charging Session Handlers
-  const handleStartCharge = useCallback(async (station) => {
-    if (!isAuthenticated) {
-      setGuestMode(false);
-      return;
+  // ── 3. Load Active Charging Session from Real REST API ──
+  const [loadingActiveSession, setLoadingActiveSession] = useState(false);
+
+  useEffect(() => {
+    async function loadActiveSession() {
+      if (!isAuthenticated) {
+        setActiveChargingSession(null);
+        return;
+      }
+
+      try {
+        setLoadingActiveSession(true);
+        const active = await chargingService.getActiveSession();
+        setActiveChargingSession(active);
+      } catch (err) {
+        console.error('[App] Error checking active charging session:', err);
+        setActiveChargingSession(null);
+      } finally {
+        setLoadingActiveSession(false);
+      }
     }
+    loadActiveSession();
+  }, [isAuthenticated]);
 
-    if (balance < 50) {
-      alert('⚠️ Low VahanPass Balance. Please top up at least ₹50 to initiate charging.');
-      return;
-    }
+  // Charging Session Handlers (Real PostgreSQL REST API)
+  const handleStartCharge = useCallback(
+    async (startParams) => {
+      if (!isAuthenticated) {
+        setGuestMode(false);
+        return;
+      }
 
-    const session = await chargingService.startSession({
-      station,
-      startSoc: userSoc,
-      isOffline: !isNetworkOnline,
-    });
+      // Extract connectorId and vehicleId
+      let connectorId = startParams?.connectorId;
+      let vehicleId = startParams?.vehicleId;
 
-    setActiveChargingSession(session);
-    setShowChargingModal(true);
-    setSelectedStation(null);
+      // Fallback if called with just a station object (e.g., from quick-launch or map)
+      if (!connectorId && startParams) {
+        const targetStation = startParams.station || startParams;
+        if (Array.isArray(targetStation.evses)) {
+          const allConns = targetStation.evses.flatMap((e) => e.connectors || []);
+          const avail = allConns.find((c) => c.status === 'available');
+          connectorId = avail?.id || allConns[0]?.id;
+        }
+      }
 
-    // Refresh station state
-    const refreshed = await stationService.getStations();
-    setStations(refreshed);
-  }, [balance, userSoc, isNetworkOnline, isAuthenticated]);
+      if (!vehicleId) {
+        vehicleId = selectedVehicle?.id || (vehicles.length > 0 ? vehicles[0].id : null);
+      }
 
-  const handleStopCharge = useCallback(async ({ cost, kwh, soc }) => {
-    if (!activeChargingSession) return;
+      if (!vehicleId) {
+        throw new Error('Add a vehicle before starting a charging session.');
+      }
 
-    setUserSoc(soc);
-    const result = await chargingService.stopSession({
-      session: activeChargingSession,
-      finalSoc: soc,
-      kwh,
-      cost,
-    });
+      if (!connectorId) {
+        throw new Error('Please select an available connector.');
+      }
 
-    if (result.success) {
+      const session = await chargingService.startChargingSession(connectorId, vehicleId);
+      setActiveChargingSession(session);
+      setShowChargingModal(true);
+      setSelectedStation(null);
+
+      // Refresh station records so connector status updates (available -> charging)
+      try {
+        const refreshedStations = await stationService.getStations();
+        setStations(refreshedStations);
+      } catch (stErr) {
+        console.warn('[App] Could not refresh stations after start:', stErr);
+      }
+
+      return session;
+    },
+    [isAuthenticated, selectedVehicle, vehicles]
+  );
+
+  const handleStopCharge = useCallback(
+    async (sessionIdToStop) => {
+      const id = sessionIdToStop || activeChargingSession?.id || activeChargingSession?.sessionId;
+      if (!id) return;
+
+      const stoppedSession = await chargingService.stopChargingSession(id);
       setActiveChargingSession(null);
       setShowChargingModal(false);
 
-      // Refresh balance, transactions, and stations
-      const [newBal, allTx, allStations] = await Promise.all([
-        walletService.getBalance(),
-        walletService.getTransactions(),
-        stationService.getStations(),
-      ]);
+      // Refresh station records so connector status updates (charging -> available)
+      try {
+        const refreshedStations = await stationService.getStations();
+        setStations(refreshedStations);
+      } catch (stErr) {
+        console.warn('[App] Could not refresh stations after stop:', stErr);
+      }
 
-      setBalance(newBal);
-      setTransactions(allTx);
-      setStations(allStations);
-    }
-  }, [activeChargingSession]);
+      return stoppedSession;
+    },
+    [activeChargingSession]
+  );
 
   // Reservation Handlers
   const handleReserveStation = useCallback(async (station) => {
@@ -409,8 +452,8 @@ export default function App() {
                 onOpenChargingSession={() => setShowChargingModal(true)}
                 onStopChargingSession={handleStopCharge}
                 stations={stations}
-                onStartCharge={handleStartCharge}
                 onSelectStation={setSelectedStation}
+                isLoadingActive={loadingActiveSession}
               />
             )}
 
@@ -423,7 +466,7 @@ export default function App() {
             )}
 
             {activePage === 'history' && (
-              <HistoryPage transactions={transactions} />
+              <HistoryPage />
             )}
 
             {activePage === 'profile' && (
@@ -463,6 +506,10 @@ export default function App() {
               onReserve={handleReserveStation}
               onCancelReservation={handleCancelReservation}
               isCharging={!!activeChargingSession}
+              vehicles={vehicles}
+              selectedVehicle={selectedVehicle}
+              onSelectVehicle={handleSelectVehicle}
+              onNavigate={handleNavigate}
             />
           )}
 
@@ -471,6 +518,7 @@ export default function App() {
             <ActiveChargingModal
               session={activeChargingSession}
               onStop={handleStopCharge}
+              onClose={() => setShowChargingModal(false)}
             />
           )}
         </div>
