@@ -267,53 +267,8 @@ export const DEFAULT_CORRIDOR_PATH = [
   [28.5800, 77.3100], [28.6139, 77.2090],
 ];
 
-// ─── Reference Initial Transactions (VahanPass Roaming) ───
-export const INITIAL_TRANSACTIONS = [
-  {
-    id: 'tx-101',
-    op: 'Tata Power EZ Charge',
-    station: 'Hazratganj Hub',
-    kwh: 28.4,
-    cost: 525.40,
-    time: '24 Sep, 10:15 AM',
-    type: 'Direct',
-    status: 'Completed',
-    isOffline: false,
-  },
-  {
-    id: 'tx-102',
-    op: 'ChargeZone InterCity',
-    station: 'Yamuna Exp km100',
-    kwh: 34.2,
-    cost: 649.80,
-    time: '22 Sep, 02:40 PM',
-    type: 'Roaming (OCPI)',
-    status: 'Completed',
-    isOffline: false,
-  },
-  {
-    id: 'tx-103',
-    op: 'Statiq EV Network',
-    station: 'Kanpur NH19 Hub',
-    kwh: 19.8,
-    cost: 415.80,
-    time: '18 Sep, 06:12 PM',
-    type: 'Roaming (OCPI)',
-    status: 'Completed',
-    isOffline: false,
-  },
-  {
-    id: 'tx-104',
-    op: 'Jio-bp pulse',
-    station: 'Mathura Plaza Plaza',
-    kwh: 38.0,
-    cost: 855.00,
-    time: '12 Sep, 11:30 AM',
-    type: 'Roaming (OCPI)',
-    status: 'Completed',
-    isOffline: true,
-  }
-];
+// Note: INITIAL_TRANSACTIONS mock data removed in Phase 3C.4B (replaced by PostgreSQL wallet_transactions).
+
 
 // ─── Development AI Responses for VahanGrid Mobility Copilot ───
 export const AI_MOCK_KNOWLEDGE = {

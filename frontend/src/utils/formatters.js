@@ -2,19 +2,44 @@
  * Formatting utilities for Indian EV mobility numbers, currencies, and timestamps.
  */
 
-export function formatCurrency(amount) {
-  if (typeof amount !== 'number') return '₹0';
-  return `₹${amount.toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+export function formatCurrency(amount, currency = 'INR') {
+  const curr = currency || 'INR';
+  if (typeof amount !== 'number' || isNaN(amount)) {
+    return `${curr === 'INR' ? '₹' : curr + ' '}0.00`;
+  }
+  try {
+    return new Intl.NumberFormat(curr === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency: curr,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch (_) {
+    const symbol = curr === 'INR' ? '₹' : `${curr} `;
+    return `${symbol}${amount.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
 }
 
-export function formatCompactCurrency(amount) {
-  if (typeof amount !== 'number') return '₹0';
-  return `₹${amount.toLocaleString('en-IN', {
-    maximumFractionDigits: 0,
-  })}`;
+export function formatCompactCurrency(amount, currency = 'INR') {
+  const curr = currency || 'INR';
+  if (typeof amount !== 'number' || isNaN(amount)) {
+    return `${curr === 'INR' ? '₹' : curr + ' '}0`;
+  }
+  try {
+    return new Intl.NumberFormat(curr === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency: curr,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch (_) {
+    const symbol = curr === 'INR' ? '₹' : `${curr} `;
+    return `${symbol}${amount.toLocaleString('en-IN', {
+      maximumFractionDigits: 0,
+    })}`;
+  }
 }
 
 export function formatKwh(kwh) {

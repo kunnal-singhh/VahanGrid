@@ -7,7 +7,7 @@ import evBanner from '../../assets/ev_banner.png';
 export default function AIChatbot({
   userSoc = 75,
   selectedVehicle,
-  balance = 1450,
+  balance = 0,
 }) {
   const [messages, setMessages] = useState([
     {

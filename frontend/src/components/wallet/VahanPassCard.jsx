@@ -1,7 +1,7 @@
 import { Zap, ShieldCheck, CreditCard, QrCode } from 'lucide-react';
 import { formatCompactCurrency } from '../../utils/formatters';
 
-export default function VahanPassCard({ balance = 1450 }) {
+export default function VahanPassCard({ balance = 0, currency = 'INR', status = 'active' }) {
   return (
     <div
       className="relative rounded-3xl overflow-hidden p-6 md:p-7 min-h-[200px] md:min-h-[220px] flex flex-col justify-between shadow-2xl border border-sky-500/25 transition-transform hover:scale-[1.01]"
@@ -27,6 +27,9 @@ export default function VahanPassCard({ balance = 1450 }) {
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">
               UNIVERSAL
             </span>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+              {status || 'ACTIVE'}
+            </span>
           </div>
           <div className="text-[10px] text-slate-400 font-mono mt-1">
             VG-PASS-9942-IN-ROAMING
@@ -45,8 +48,8 @@ export default function VahanPassCard({ balance = 1450 }) {
           Unified Roaming Balance
         </div>
         <div className="text-3xl md:text-4xl font-black font-display text-white mt-0.5 tracking-tight flex items-baseline gap-1">
-          <span>{formatCompactCurrency(balance)}</span>
-          <span className="text-xs font-semibold text-emerald-400 font-sans">INR</span>
+          <span>{formatCompactCurrency(balance, currency)}</span>
+          <span className="text-xs font-semibold text-emerald-400 font-sans">{currency || 'INR'}</span>
         </div>
       </div>
 

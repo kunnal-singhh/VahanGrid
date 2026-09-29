@@ -1,85 +1,86 @@
 /**
- * ============================================================================
- * VAHANGRID WALLET & PAYMENTS SERVICE
- * ============================================================================
- * 
- * ARCHITECTURAL NOTICE:
- * Handles VahanPass unified roaming balance, top-up requests, and transaction logs.
- * 
- * In production phases:
- * - Direct integration with Unified Payments Interface (UPI 2.0 AutoPay / Bharat BillPay)
- * - OCPI CDR (Charge Detail Record) clearing house reconciliation
- * - GST compliant automated invoicing
- * ============================================================================
+ * frontend/src/services/walletService.js
+ *
+ * REST API client for VahanGrid Wallet operations (Phase 3C.4B).
+ * Connects to Express + PostgreSQL:
+ *   - GET /api/v1/wallet               (authenticated user's wallet + derived balance)
+ *   - GET /api/v1/wallet/transactions  (authenticated user's transaction history)
+ *
+ * Security & Data Model:
+ *   - All requests send credentials: 'include' for HTTP-only JWT cookies.
+ *   - Identity is derived strictly on the server from the verified session (req.user.id).
+ *   - Balance is calculated authoritatively by PostgreSQL via a signed ledger (SUM(amount)).
+ *   - The frontend never calculates, fabricates, or stores the wallet balance.
+ *   - Never stores wallet balance in localStorage.
  */
 
-import { INITIAL_TRANSACTIONS } from '../data/mockData';
-import { formatTimestampIST } from '../utils/formatters';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1';
 
-let currentBalance = 1450.00;
-let transactionHistory = [...INITIAL_TRANSACTIONS];
+/**
+ * Handles HTTP response from wallet endpoints, parsing error payloads cleanly.
+ */
+async function handleResponse(res, fallbackMessage) {
+  if (res.status === 401) {
+    const err = new Error('Authentication required. Please log in.');
+    err.status = 401;
+    err.code = 'UNAUTHORIZED';
+    throw err;
+  }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = json?.error?.message || fallbackMessage;
+    const err = new Error(message);
+    err.status = res.status;
+    err.code = json?.error?.code;
+    throw err;
+  }
+  return json.data;
+}
 
 export const walletService = {
   /**
-   * Retrieves the current unified wallet balance.
+   * Retrieves the authenticated user's wallet object.
+   * Shape: { id, user_id, currency, status, created_at, updated_at, balance }
+   * @returns {Promise<object>}
    */
-  async getBalance() {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    return currentBalance;
+  async getWallet() {
+    const res = await fetch(`${API_BASE_URL}/wallet`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+    return handleResponse(res, 'Failed to retrieve wallet information');
   },
 
   /**
-   * Tops up the VahanPass wallet.
+   * Retrieves the authenticated user's wallet transactions, ordered newest-first.
+   * Shape: Array<{ id, wallet_id, type, amount, currency, reference_type, reference_id, description, created_at }>
+   * @returns {Promise<Array<object>>}
    */
-  async topUp(amount) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    currentBalance += Number(amount);
-    
-    // Create audit record for the top-up
-    const topUpRecord = {
-      id: `topup-${Date.now()}`,
-      op: 'VahanPass UPI Inflow',
-      station: 'Instant Auto-Credit',
-      kwh: 0,
-      cost: -Number(amount), // Negative cost indicates credit
-      time: formatTimestampIST(),
-      type: 'Wallet Top-Up',
-      status: 'Completed',
-      isOffline: false,
-    };
-    transactionHistory = [topUpRecord, ...transactionHistory];
-
-    return { success: true, newBalance: currentBalance, transaction: topUpRecord };
+  async getWalletTransactions() {
+    const res = await fetch(`${API_BASE_URL}/wallet/transactions`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+    const data = await handleResponse(res, 'Failed to retrieve wallet transactions');
+    return Array.isArray(data) ? data : [];
   },
 
   /**
-   * Fetches past transactions across all networks.
+   * Compatibility alias for getWalletTransactions.
+   * @returns {Promise<Array<object>>}
    */
   async getTransactions() {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return [...transactionHistory];
+    return this.getWalletTransactions();
   },
 
   /**
-   * Deducts funds for a completed charging session.
+   * Compatibility helper returning only the derived balance number.
+   * @returns {Promise<number>}
    */
-  async recordChargingSessionPayment({ stationName, operatorName, kwh, cost, isOffline = false }) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    currentBalance = Math.max(0, Math.round((currentBalance - cost) * 100) / 100);
-
-    const tx = {
-      id: `chg-${Date.now()}`,
-      op: operatorName || 'CPO Roaming',
-      station: stationName ? stationName.split('—')[1]?.trim() || stationName : 'Hub Charger',
-      kwh: Number(kwh) || 0,
-      cost: Number(cost) || 0,
-      time: formatTimestampIST(),
-      type: isOffline ? 'Direct (Edge Sync)' : 'Roaming (OCPI)',
-      status: 'Completed',
-      isOffline,
-    };
-
-    transactionHistory = [tx, ...transactionHistory];
-    return { success: true, newBalance: currentBalance, transaction: tx };
-  }
+  async getBalance() {
+    const wallet = await this.getWallet();
+    return wallet?.balance ?? 0;
+  },
 };

@@ -39,8 +39,7 @@ export default function App() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
-  const [balance, setBalance] = useState(1450);
-  const [transactions, setTransactions] = useState([]);
+  const [balance, setBalance] = useState(0);
   const [userSoc, setUserSoc] = useState(72);
 
   // Active Charging Session State
@@ -56,19 +55,12 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ── 1. Load Public Station & Wallet Mock Data ──
+  // ── 1. Load Public Station Data ──
   useEffect(() => {
     async function loadPublicData() {
       try {
-        const [allStations, currentBal, allTx] = await Promise.all([
-          stationService.getStations(),
-          walletService.getBalance(),
-          walletService.getTransactions(),
-        ]);
-
+        const allStations = await stationService.getStations();
         setStations(allStations || []);
-        setBalance(currentBal || 0);
-        setTransactions(allTx || []);
       } catch (err) {
         console.error('[App] Error loading public station data:', err);
       }
@@ -158,6 +150,26 @@ export default function App() {
       }
     }
     loadActiveSession();
+  }, [isAuthenticated]);
+
+  // ── 4. Load Authenticated User Wallet ──
+  useEffect(() => {
+    async function loadUserWallet() {
+      if (!isAuthenticated) {
+        setBalance(0);
+        return;
+      }
+      try {
+        const wallet = await walletService.getWallet();
+        if (wallet) {
+          setBalance(wallet.balance ?? 0);
+        }
+      } catch (err) {
+        console.error('[App] Error loading authenticated user wallet:', err);
+        setBalance(0);
+      }
+    }
+    loadUserWallet();
   }, [isAuthenticated]);
 
   // Charging Session Handlers (Real PostgreSQL REST API)
@@ -252,16 +264,6 @@ export default function App() {
     const refreshed = await stationService.getStations();
     setStations(refreshed);
     setSelectedStation((prev) => (prev ? { ...prev, status: 'available', waitMin: 0 } : null));
-  }, []);
-
-  // Wallet Top-Up Handler
-  const handleTopUp = useCallback(async (amt) => {
-    const res = await walletService.topUp(amt);
-    if (res.success) {
-      setBalance(res.newBalance);
-      const allTx = await walletService.getTransactions();
-      setTransactions(allTx);
-    }
   }, []);
 
   // Route Planning Handlers
@@ -458,11 +460,7 @@ export default function App() {
             )}
 
             {activePage === 'wallet' && (
-              <WalletPage
-                balance={balance}
-                transactions={transactions}
-                onTopUp={handleTopUp}
-              />
+              <WalletPage onBalanceSync={setBalance} />
             )}
 
             {activePage === 'history' && (
