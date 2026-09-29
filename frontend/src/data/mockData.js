@@ -31,15 +31,8 @@ export const OPERATORS = [
   { id: 'kazam',      name: 'Kazam EV',             logo: '🔌', accent: '#8b5cf6', shortName: 'Kazam' },
 ];
 
-// ─── Indian EV Vehicles Portfolio ───
-export const VEHICLES = [
-  { id: 'nexon',  name: 'Tata Nexon EV Max',     range: 437, battery: 40.5, connector: 'CCS2', efficiency: 10.8 },
-  { id: 'zsev',   name: 'MG ZS EV Long Range',   range: 461, battery: 50.3, connector: 'CCS2', efficiency: 11.2 },
-  { id: 'xuv400', name: 'Mahindra XUV400 EL Pro', range: 456, battery: 39.4, connector: 'CCS2', efficiency: 11.0 },
-  { id: 'ioniq5', name: 'Hyundai Ioniq 5',       range: 631, battery: 72.6, connector: 'CCS2', efficiency: 12.1 },
-  { id: 'atto3',  name: 'BYD Atto 3 Superior',   range: 521, battery: 60.5, connector: 'CCS2', efficiency: 11.5 },
-  { id: 'tiago',  name: 'Tata Tiago.ev Long',    range: 250, battery: 24.0, connector: 'CCS2', efficiency: 9.6  },
-];
+// Note: VEHICLES mock array removed in Phase 3C.2.
+// Real vehicles are managed via PostgreSQL REST API (/api/v1/vehicles).
 
 // ─── Reference Charging Stations Across Key Indian Corridors ───
 export const STATIONS = [

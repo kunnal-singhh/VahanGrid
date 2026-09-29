@@ -148,24 +148,36 @@ export default function Sidebar({
                 <Car className="w-3 h-3 text-sky-400" /> My Vehicle
               </span>
               <span className="text-[9px] text-emerald-400 font-semibold">
-                {selectedVehicle?.range || 437} km
+                {selectedVehicle ? `${selectedVehicle.range} km` : 'No EV'}
               </span>
             </div>
-            <select
-              value={selectedVehicle?.id || 'nexon'}
-              onChange={(e) => onSelectVehicle(e.target.value)}
-              className={`w-full text-xs rounded-xl px-2.5 py-1.5 outline-none transition-colors cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-slate-100 border border-slate-200 text-slate-900'
-                  : 'bg-slate-900/90 border border-white/10 text-white focus:border-sky-500/40'
-              }`}
-            >
-              {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.battery} kWh)
-                </option>
-              ))}
-            </select>
+            {vehicles && vehicles.length > 0 ? (
+              <select
+                id="sidebar-vehicle-select"
+                value={selectedVehicle?.id || ''}
+                onChange={(e) => onSelectVehicle(e.target.value)}
+                className={`w-full text-xs rounded-xl px-2.5 py-1.5 outline-none transition-colors cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-slate-100 border border-slate-200 text-slate-900'
+                    : 'bg-slate-900/90 border border-white/10 text-white focus:border-sky-500/40'
+                }`}
+              >
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name || `${v.manufacturer} ${v.model}`} ({v.battery || v.battery_capacity_kwh} kWh)
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate('profile')}
+                id="sidebar-add-vehicle-link"
+                className="w-full text-left text-xs text-sky-400 hover:text-sky-300 py-1 transition-colors cursor-pointer"
+              >
+                + Add vehicle in Profile
+              </button>
+            )}
           </div>
         )}
 

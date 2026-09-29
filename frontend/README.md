@@ -2,7 +2,7 @@
 
 > React 19 + Vite web client for the VahanGrid unified EV charging platform.
 
-**Status: Phase 3C.1 Complete — Frontend Authentication Integration**
+**Status: Phase 3C.2 Complete — Frontend Vehicle Integration**
 
 ---
 
@@ -36,48 +36,57 @@ Express Backend + PostgreSQL
 
 ---
 
-## 2. Using Authentication in Components
+## 2. Vehicle Integration (Phase 3C.2)
 
-Wrap your application in `AuthProvider` (already configured in `src/main.jsx`):
+Vehicle management connects to the real PostgreSQL-backed REST API:
 
-```jsx
-import { AuthProvider } from './context/AuthContext';
+- `GET    /api/v1/vehicles` — List user's registered vehicles
+- `POST   /api/v1/vehicles` — Add a new EV to account
+- `GET    /api/v1/vehicles/:id` — Get single vehicle details
+- `PATCH  /api/v1/vehicles/:id` — Update vehicle specifications
+- `DELETE /api/v1/vehicles/:id` — Remove vehicle from account
 
-createRoot(document.getElementById('root')).render(
-  <AuthProvider>
-    <App />
-  </AuthProvider>
-);
-```
+All requests use `credentials: "include"`. Mock `VEHICLES` data has been completely eliminated from the frontend. Empty, loading, and error states are handled gracefully.
 
-Consume user identity and authentication actions in any component via `useAuth()`:
+---
 
+## 3. Using Services in Components
+
+### Authentication
 ```jsx
 import { useAuth } from '../context/AuthContext';
 
 function MyComponent() {
   const { user, isAuthenticated, loading, login, register, logout } = useAuth();
-
-  if (loading) {
-    return <div>Connecting to VahanGrid...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <div>Please sign in</div>;
-  }
-
-  return (
-    <div>
-      <p>Welcome back, {user.name} ({user.email})</p>
-      <button onClick={logout}>Sign Out</button>
-    </div>
-  );
+  ...
 }
+```
+
+### Vehicles
+```jsx
+import { vehicleService } from '../services/vehicleService';
+
+// Fetch vehicles
+const vehicles = await vehicleService.getVehicles();
+
+// Create vehicle
+const newVehicle = await vehicleService.createVehicle({
+  manufacturer: 'Tata',
+  model: 'Nexon EV Max',
+  battery_capacity_kwh: 40.5,
+  connector_type: 'CCS2',
+});
+
+// Update vehicle
+await vehicleService.updateVehicle(vehicleId, { variant: 'Dark Edition' });
+
+// Delete vehicle
+await vehicleService.deleteVehicle(vehicleId);
 ```
 
 ---
 
-## 3. Protected UI & Guest Mode
+## 4. Protected UI & Guest Mode
 
 - **Protected Pages**: `Dashboard`, `Charging Hub`, `VahanPass Wallet`, `Session History`, and `Driver Profile` require authentication.
 - **Guest Station Exploration**: Unauthenticated visitors can view public charging stations and the interactive map in guest mode.
@@ -85,7 +94,7 @@ function MyComponent() {
 
 ---
 
-## 4. Development & Build
+## 5. Development & Build
 
 ```bash
 # Install dependencies

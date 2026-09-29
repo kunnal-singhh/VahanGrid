@@ -56,28 +56,73 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Initial Data Fetch via Services
+  // ── 1. Load Public Station & Wallet Mock Data ──
   useEffect(() => {
-    async function loadInitialData() {
+    async function loadPublicData() {
       try {
-        const [allStations, allVehicles, activeVeh, currentBal, allTx] = await Promise.all([
+        const [allStations, currentBal, allTx] = await Promise.all([
           stationService.getStations(),
-          vehicleService.getVehicles(),
-          vehicleService.getActiveVehicle(),
           walletService.getBalance(),
           walletService.getTransactions(),
         ]);
 
         setStations(allStations || []);
-        setVehicles(allVehicles || []);
-        setSelectedVehicle(activeVeh);
         setBalance(currentBal || 0);
         setTransactions(allTx || []);
       } catch (err) {
-        console.error('[App] Error loading initial service data:', err);
+        console.error('[App] Error loading public station data:', err);
       }
     }
-    loadInitialData();
+    loadPublicData();
+  }, []);
+
+  // ── 2. Load Authenticated Vehicles from Real REST API ──
+  useEffect(() => {
+    async function loadUserVehicles() {
+      if (!isAuthenticated) {
+        setVehicles([]);
+        setSelectedVehicle(null);
+        return;
+      }
+
+      try {
+        const userVehicles = await vehicleService.getVehicles();
+        setVehicles(userVehicles);
+
+        const savedActiveId = vehicleService.getActiveVehicleId();
+        const active =
+          userVehicles.find((v) => v.id === savedActiveId) ||
+          userVehicles[0] ||
+          null;
+
+        setSelectedVehicle(active);
+      } catch (err) {
+        console.error('[App] Error fetching authenticated user vehicles:', err);
+        setVehicles([]);
+        setSelectedVehicle(null);
+      }
+    }
+    loadUserVehicles();
+  }, [isAuthenticated]);
+
+  // Vehicle Selection Handler
+  const handleSelectVehicle = useCallback(
+    (id) => {
+      const veh = vehicles.find((v) => v.id === id) || null;
+      setSelectedVehicle(veh);
+      vehicleService.setActiveVehicleId(id);
+    },
+    [vehicles]
+  );
+
+  // Vehicle Collection Change Handler (Add / Edit / Delete)
+  const handleVehiclesChange = useCallback((updatedVehicles) => {
+    setVehicles(updatedVehicles);
+    setSelectedVehicle((prev) => {
+      if (!prev) return updatedVehicles[0] || null;
+      const stillExists = updatedVehicles.find((v) => v.id === prev.id);
+      return stillExists || updatedVehicles[0] || null;
+    });
   }, []);
 
   // Theme Toggle Handler
@@ -284,10 +329,7 @@ export default function App() {
           theme={theme}
           selectedVehicle={selectedVehicle}
           vehicles={vehicles}
-          onSelectVehicle={(id) => {
-            const veh = vehicleService.setActiveVehicle(id);
-            setSelectedVehicle(veh);
-          }}
+          onSelectVehicle={handleSelectVehicle}
           co2SavedKg={co2Total}
           activeChargingSession={activeChargingSession}
         />
@@ -387,10 +429,9 @@ export default function App() {
             {activePage === 'profile' && (
               <ProfilePage
                 selectedVehicle={selectedVehicle}
-                onSelectVehicle={(id) => {
-                  const veh = vehicleService.setActiveVehicle(id);
-                  setSelectedVehicle(veh);
-                }}
+                onSelectVehicle={handleSelectVehicle}
+                vehicles={vehicles}
+                onVehiclesChange={handleVehiclesChange}
               />
             )}
 
