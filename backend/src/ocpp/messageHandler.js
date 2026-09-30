@@ -18,6 +18,7 @@
 
 import { OcppError, ERROR_CODES } from './ocppErrors.js';
 import { handleBootNotification } from './handlers/bootNotificationHandler.js';
+import { handleStatusNotification } from './handlers/statusNotificationHandler.js';
 
 // OCPP 2.0.1 Message Type Identifiers
 export const MESSAGE_TYPE_CALL = 2;
@@ -189,9 +190,30 @@ export async function handleOcppMessage(rawMessage, chargePointId, ws) {
     return;
   }
 
+  if (action === 'StatusNotification') {
+    try {
+      const responsePayload = await handleStatusNotification(payload, chargePointId, ws);
+      sendCallResult(ws, messageId, responsePayload);
+    } catch (err) {
+      if (err instanceof OcppError) {
+        sendCallError(ws, messageId, err.code, err.message, err.details);
+      } else {
+        console.error(`[OCPP] [${chargePointId}] Unexpected error processing StatusNotification:`, err);
+        sendCallError(
+          ws,
+          messageId,
+          ERROR_CODES.INTERNAL_ERROR,
+          'Internal error processing StatusNotification',
+          {}
+        );
+      }
+    }
+    return;
+  }
+
   // ── 9. Unsupported action handling ────────────────────────────────────────
-  // Per Phase 3D.3 scope, actions other than BootNotification must return
-  // an appropriate OCPP error (NotImplemented) without fabricating responses.
+  // Per Phase 3D.4A scope, actions other than BootNotification and StatusNotification
+  // must return an appropriate OCPP error (NotImplemented) without fabricating responses.
   console.warn(
     `[OCPP] [${chargePointId}] Received unsupported action "${action}". Returning NotImplemented.`
   );
@@ -199,7 +221,7 @@ export async function handleOcppMessage(rawMessage, chargePointId, ws) {
     ws,
     messageId,
     ERROR_CODES.NOT_IMPLEMENTED,
-    `Action "${action}" is not implemented yet in Phase 3D.3`,
+    `Action "${action}" is not implemented yet in Phase 3D.4A`,
     {}
   );
 }

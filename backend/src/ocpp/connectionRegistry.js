@@ -134,6 +134,74 @@ class ConnectionRegistry {
   }
 
   /**
+   * Updates the in-memory entry for a charge point with StatusNotification data.
+   *
+   * @param {string} chargePointId
+   * @param {object} statusData - StatusNotification details (timestamp, connectorStatus, evseId, connectorId)
+   * @returns {object|null} The updated entry, or null if charge point is not registered
+   */
+  updateStatusNotification(chargePointId, statusData) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    const reportedAt = new Date();
+    entry.latestStatusNotification = {
+      ...statusData,
+      reportedAt,
+    };
+    entry.lastStatusReportedAt = reportedAt;
+
+    if (!entry.statusNotifications) {
+      entry.statusNotifications = new Map();
+    }
+    const key = `${statusData.evseId}:${statusData.connectorId}`;
+    entry.statusNotifications.set(key, {
+      ...statusData,
+      reportedAt,
+    });
+
+    // Attach to websocket instance for direct access
+    entry.ws.latestStatusNotification = entry.latestStatusNotification;
+    entry.ws.lastStatusReportedAt = entry.lastStatusReportedAt;
+
+    return entry;
+  }
+
+  /**
+   * Retrieves latest StatusNotification data for a registered charge point.
+   *
+   * @param {string} chargePointId
+   * @returns {object|null}
+   */
+  getLatestStatusNotification(chargePointId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    return entry ? entry.latestStatusNotification || null : null;
+  }
+
+  /**
+   * Retrieves StatusNotification data for a specific EVSE/connector or latest.
+   *
+   * @param {string} chargePointId
+   * @param {number} [evseId]
+   * @param {number} [connectorId]
+   * @returns {object|null}
+   */
+  getStatusNotification(chargePointId, evseId, connectorId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    if (evseId !== undefined && connectorId !== undefined) {
+      const key = `${evseId}:${connectorId}`;
+      return entry.statusNotifications?.get(key) || null;
+    }
+
+    return entry.latestStatusNotification || null;
+  }
+
+  /**
    * Checks if an active connection exists for the chargePointId.
    *
    * @param {string} chargePointId

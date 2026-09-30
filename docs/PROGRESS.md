@@ -18,10 +18,50 @@
 | **Phase 3C.4B**| Frontend Wallet Integration (Real REST Client, Dynamic Currency) | ✅ Complete | `test_phase3c4b.js` (40/40 passed) |
 | **Phase 3D.2** | OCPP WebSocket Foundation (Gateway & Connection Registry)   | ✅ Complete | `test_phase3d2.js` (47/47 passed)  |
 | **Phase 3D.3** | OCPP 2.0.1 BootNotification (Request/Response & Schema)     | ✅ Complete | `test_phase3d3.js` (55/55 passed)  |
+| **Phase 3D.4A**| OCPP 2.0.1 StatusNotification (Schema & Transient State)    | ✅ Complete | `test_phase3d4a.js` (62/62 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.4A — OCPP 2.0.1 StatusNotification
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d4a.js` (62/62 tests passing)
+- **Compliance Notice:** *"VahanGrid supports BootNotification and StatusNotification handling, but does not yet provide full OCPP 2.0.1 compliance."*
+
+#### Architectural Design & Implementation:
+1. **StatusNotification Request Handler (`backend/src/ocpp/handlers/statusNotificationHandler.js`):**
+   - Validates incoming `StatusNotification` payload strictly according to the official OCPP 2.0.1 specification:
+     - `timestamp`: required ISO 8601 date-time string. Malformed or non-string timestamp returns `FormatViolation`.
+     - `connectorStatus`: required `ConnectorStatusEnumType` string (`Available`, `Occupied`, `Reserved`, `Unavailable`, `Faulted`). Non-conforming values (e.g. `Preparing`, `Charging`, `SuspendedEV`, `Finishing`, or invalid strings) return `PropertyConstraintViolation`.
+     - `evseId`: required non-negative integer (`>= 0`). Non-integers return `FormatViolation`; negative values return `PropertyConstraintViolation`.
+     - `connectorId`: required non-negative integer (`>= 0`). Non-integers return `FormatViolation`; negative values return `PropertyConstraintViolation`.
+     - `customData`: optional JSON object.
+     - Identity consistency: if an explicit charge point or station ID is passed in the payload, it must match the connection URL path; otherwise returns `PropertyConstraintViolation`.
+
+2. **OCPP Message Router (`backend/src/ocpp/messageHandler.js`):**
+   - Dispatches `action === 'StatusNotification'` to `handleStatusNotification`.
+   - Returns standards-compliant `CALLRESULT` frame: `[3, "<messageId>", {}]`.
+   - Returns `CALLERROR` frame on validation failures without dropping the WebSocket connection.
+   - Preserves `NotImplemented` `CALLERROR` for unsupported actions (`Heartbeat`, `TransactionEvent`, `MeterValues`, `Authorize`, etc.).
+
+3. **Transient State Management (`backend/src/ocpp/connectionRegistry.js`):**
+   - Extended `ConnectionRegistry` with:
+     - `updateStatusNotification(chargePointId, statusData)`: associates latest status notification and updates per-connector status map (`${evseId}:${connectorId}`).
+     - `getLatestStatusNotification(chargePointId)`: retrieves latest status notification for the station.
+     - `getStatusNotification(chargePointId, evseId, connectorId)`: retrieves specific connector status.
+   - State is stored strictly in application memory (`Map`); NO database tables or records are modified.
+
+4. **Zero Database Impact:**
+   - PostgreSQL `connectors` table remains unmodified; no schema changes or database writes occur for status notifications in this phase.
+   - Verified that connector row count and connector statuses remain completely untouched.
+
+5. **Explicit Current Limitations:**
+   - Persistent mapping between OCPP EVSE/connector identifiers and PostgreSQL relational `evses`/`connectors` tables is not implemented yet (scheduled for follow-up Phase 3D.4B).
+   - Session lifecycle integration, energy telemetry (`MeterValues`), charging transactions (`TransactionEvent`), billing, and wallet deductions are not implemented.
+
+---
 
 ### Phase 3D.3 — OCPP 2.0.1 BootNotification
 - **Status:** Completed

@@ -30,6 +30,11 @@ export {
 } from './handlers/bootNotificationHandler.js';
 
 export {
+  handleStatusNotification,
+  VALID_CONNECTOR_STATUSES,
+} from './handlers/statusNotificationHandler.js';
+
+export {
   OcppError,
   ERROR_CODES,
 } from './ocppErrors.js';
