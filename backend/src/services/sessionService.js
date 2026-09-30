@@ -414,3 +414,43 @@ export async function stopSession(sessionId, userId) {
     client.release();
   }
 }
+
+/**
+ * Retrieves historical telemetry time-series curve for a charging session (Phase 3D.7B).
+ *
+ * Scoped by authenticated userId to prevent IDOR.
+ * Returns chronological list of samples (recorded_at, power_kw, soc_percent, energy_kwh).
+ *
+ * @param {string} sessionId
+ * @param {string} userId
+ * @returns {Promise<Array<object>>}
+ */
+export async function getSessionTelemetry(sessionId, userId) {
+  // Verify session exists and belongs to user
+  const sess = await query(
+    `SELECT id FROM charging_sessions WHERE id = $1 AND user_id = $2`,
+    [sessionId, userId]
+  );
+
+  if (sess.rows.length === 0) {
+    const err = new Error('Session not found.');
+    err.statusCode = 404;
+    err.code = 'SESSION_NOT_FOUND';
+    throw err;
+  }
+
+  const res = await query(
+    `SELECT
+       recorded_at,
+       power_kw::float      AS power_kw,
+       soc_percent::integer AS soc_percent,
+       energy_kwh::float    AS energy_kwh
+     FROM ocpp_session_telemetry
+     WHERE session_id = $1
+     ORDER BY recorded_at ASC`,
+    [sessionId]
+  );
+
+  return res.rows;
+}
+

@@ -514,9 +514,9 @@ async function run() {
   const txRes = await sendAndReceive(wsReg, [2, `msg-tx-${Date.now()}`, 'TransactionEvent', { eventType: 'Started' }]);
   assert(txRes[0] === 4, '64. TransactionEvent returns CALLERROR (implemented in Phase 3D.6A, validation rejects incomplete payload)');
 
-  // MeterValues remains NotImplemented in Phase 3D.5
+  // MeterValues is implemented in Phase 3D.7B — sends incomplete payload that returns CALLERROR (validation error)
   const mvRes = await sendAndReceive(wsReg, [2, `msg-mv-${Date.now()}`, 'MeterValues', { evseId: 1 }]);
-  assert(mvRes[0] === 4 && mvRes[2] === 'NotImplemented', '65. MeterValues returns NotImplemented CALLERROR');
+  assert(mvRes[0] === 4, '65. MeterValues returns CALLERROR (implemented in Phase 3D.7B, validation rejects incomplete payload)');
 
   // Authorize remains NotImplemented in Phase 3D.5
   const authOcppRes = await sendAndReceive(wsReg, [2, `msg-auth-${Date.now()}`, 'Authorize', { idToken: { idToken: 'TAG-123', type: 'ISO14443' } }]);

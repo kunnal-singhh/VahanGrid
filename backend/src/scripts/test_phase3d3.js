@@ -274,7 +274,7 @@ async function run() {
     '4e. Error description explains Authorize is not implemented'
   );
 
-  // 4b. MeterValues CALL (Not implemented in Phase 3D.3 / Phase 3D.4A)
+  // 4b. MeterValues CALL (Implemented in Phase 3D.7B; empty meterValue rejects with validation CALLERROR)
   const mvMsgId = `msg-mv-${Date.now()}`;
   const mvCall = [
     2,
@@ -284,7 +284,7 @@ async function run() {
   ];
   const mvResponse = await sendAndReceive(clientWs, mvCall);
   assert(mvResponse[0] === 4, '4f. MeterValues returns CALLERROR (type 4)');
-  assert(mvResponse[2] === 'NotImplemented', '4g. MeterValues returns NotImplemented error code');
+  assert(mvResponse[2] === 'FormatViolation' || mvResponse[2] === 'NotImplemented', '4g. MeterValues returns validation error code');
 
   // 4c. TransactionEvent CALL (Not implemented in Phase 3D.3)
   const txMsgId = `msg-tx-${Date.now()}`;

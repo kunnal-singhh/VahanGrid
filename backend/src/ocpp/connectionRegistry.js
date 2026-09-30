@@ -237,6 +237,61 @@ class ConnectionRegistry {
   }
 
   /**
+   * Updates the in-memory entry for a charge point with latest MeterValues telemetry (Phase 3D.7B).
+   *
+   * @param {string} chargePointId
+   * @param {number} evseId
+   * @param {object} telemetryData - { powerKw, socPercent, energyWh, voltageV, currentA, timestamp }
+   * @returns {object|null} The updated entry, or null if charge point is not registered
+   */
+  updateMeterValues(chargePointId, evseId, telemetryData) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    const reportedAt = new Date();
+    const reading = {
+      ...telemetryData,
+      evseId: Number(evseId),
+      reportedAt,
+    };
+
+    entry.latestMeterValues = reading;
+    entry.lastMeterValuesReportedAt = reportedAt;
+
+    if (!entry.meterValues) {
+      entry.meterValues = new Map();
+    }
+    entry.meterValues.set(Number(evseId), reading);
+
+    if (entry.ws) {
+      entry.ws.latestMeterValues = entry.latestMeterValues;
+      entry.ws.lastMeterValuesReportedAt = entry.lastMeterValuesReportedAt;
+    }
+
+    return entry;
+  }
+
+  /**
+   * Retrieves latest MeterValues telemetry for a charge point.
+   *
+   * @param {string} chargePointId
+   * @param {number} [evseId] - Optional EVSE ID. If omitted, returns latest across all EVSEs.
+   * @returns {object|null}
+   */
+  getLatestMeterValues(chargePointId, evseId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    if (evseId !== undefined && evseId !== null) {
+      return entry.meterValues?.get(Number(evseId)) || null;
+    }
+
+    return entry.latestMeterValues || null;
+  }
+
+  /**
    * Checks if an active connection exists for the chargePointId.
    *
    * @param {string} chargePointId

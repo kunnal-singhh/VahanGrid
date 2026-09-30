@@ -241,3 +241,46 @@ export async function stopSessionHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * GET /api/v1/sessions/:id/telemetry
+ *
+ * Return historical time-series telemetry curve for a session owned by the authenticated user.
+ */
+export async function getSessionTelemetryHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidUUID(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_UUID',
+          message: 'Invalid session ID format.',
+        },
+      });
+    }
+
+    const telemetry = await sessionService.getSessionTelemetry(id, req.user.id);
+    return res.status(200).json({
+      success: true,
+      data: telemetry,
+      meta: {
+        session_id: id,
+        count: telemetry.length,
+      },
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'SESSION_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+

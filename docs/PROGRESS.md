@@ -23,10 +23,49 @@
 | **Phase 3D.5** | Persistent Device State, Heartbeat & Live Status Sync       | ✅ Complete | `test_phase3d5.js` (79/79 passed)  |
 | **Phase 3D.6A**| Persistent OCPP Transaction Layer & TransactionEvent Lifecycle | ✅ Complete | `test_phase3d6a.js` (76/76 passed) |
 | **Phase 3D.6B**| OCPP TransactionEvent Energy Synchronization                | ✅ Complete | `test_phase3d6b.js` (56/56 passed) |
+| **Phase 3D.7B**| OCPP MeterValues Telemetry & Dual-Tier Storage             | ✅ Complete | `test_phase3d7b.js` (72/72 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.7B — OCPP MeterValues Telemetry & Dual-Tier Storage
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d7b.js` (72/72 tests passing)
+- **Regression Suite:** `test_phase3d6b.js` (56/56 passed), `test_phase3d6a.js` (76/76 passed), `test_phase3d5.js` (79/79 passed), `test_phase3d4b.js` (82/82 passed), `test_phase3d4a.js` (62/62 passed), `test_phase3d3.js` (55/55 passed), `test_phase3d2.js` (47/47 passed)
+- **Compliance Notice:** *"VahanGrid implements dual-tier OCPP 2.0.1 MeterValues telemetry handling, featuring Tier 1 sub-millisecond in-memory cache per EVSE in connectionRegistry, and Tier 2 PostgreSQL historical time-series storage (ocpp_session_telemetry) for active charging sessions with dedicated REST API exposure."*
+
+#### Architectural Design & Implementation:
+1. **Dual-Tier Hybrid Telemetry Model:**
+   - **Tier 1 (Real-Time In-Memory Cache):** Stored per `chargePointId` and `evseId` in `connectionRegistry.js`. Tracks latest snapshot (`powerKw`, `socPercent`, `energyWh`, `voltageV`, `currentA`, `reportedAt`) with sub-millisecond in-memory read performance and zero database write pressure for high-frequency or station-wide frames.
+   - **Tier 2 (Session Curve Persistence):** Normalized time-series entries persisted to `ocpp_session_telemetry` ONLY during active charging transactions linked to a VahanGrid `charging_sessions` record.
+   - **Zero Row Explosion Guard:** Idle EVSE telemetry and station-wide telemetry (EVSE 0) update Tier 1 live state only, generating zero rows in PostgreSQL.
+
+2. **Migration 017 (`017_create_ocpp_session_telemetry.sql`):**
+   - Created table `ocpp_session_telemetry`: `id` (UUID PK), `session_id` (FK to `charging_sessions` ON DELETE CASCADE), `ocpp_transaction_id` (FK to `ocpp_transactions` ON DELETE SET NULL), `recorded_at` (TIMESTAMPTZ), `power_kw` (NUMERIC 8,3), `soc_percent` (INTEGER), `energy_kwh` (NUMERIC 10,3), `created_at` (TIMESTAMPTZ).
+   - Created compound index `idx_ocpp_session_telemetry_curve ON ocpp_session_telemetry(session_id, recorded_at ASC)` for fast chronological curve queries.
+   - Clean domain separation maintained; no schema modifications to users, vehicles, wallets, locations, or connectors.
+
+3. **Telemetry Measurand Normalization (`parseMeterValuesTelemetry`):**
+   - Implemented in `backend/src/ocpp/handlers/meterValuesHandler.js`.
+   - `Power.Active.Import`: W / kW normalized to kW.
+   - `SoC`: State of Charge percentage bounded [0, 100].
+   - `Energy.Active.Import.Register`: Wh / kWh normalized to Wh.
+   - `Voltage`: Volts (V).
+   - `Current.Import`: Amperes (A).
+
+4. **Energy & State Synchronization:**
+   - Net energy calculation strictly respects the Phase 3D.6B delta model (`Math.max(0, energyWh - meter_start_wh) / 1000.0`).
+   - Cumulative energy protected against backwards regression via PostgreSQL `GREATEST(total_energy_kwh, $val)` and `GREATEST(energy_kwh, $val)`.
+   - Synchronizes `charging_sessions.end_soc` in real-time as SoC samples arrive.
+
+5. **Dedicated Telemetry REST API:**
+   - `GET /api/v1/sessions/:id/telemetry`:
+   - Authenticated and strictly protected against IDOR (verifies session ownership by requesting user).
+   - Returns chronological array of `{ recorded_at, power_kw, soc_percent, energy_kwh }`.
+
+---
 
 ### Phase 3D.6B — OCPP TransactionEvent Energy Synchronization
 - **Status:** Completed

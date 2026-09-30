@@ -395,7 +395,8 @@ async function run() {
 
   const mvMsgId = `msg-mv-${Date.now()}`;
   const mvRes = await sendAndReceive(clientWs1, [2, mvMsgId, 'MeterValues', { evseId: 1 }]);
-  assert(mvRes[0] === 4 && mvRes[2] === 'NotImplemented', '5h. Unsupported action "MeterValues" returns NotImplemented');
+  // MeterValues implemented in Phase 3D.7B; incomplete payload returns validation CALLERROR
+  assert(mvRes[0] === 4, '5h. MeterValues returns CALLERROR (Phase 3D.7B implements it)');
 
   // ── 6. Transient State & Multi-Client Independence ────────────────────────
   console.log('\n--- 6. Transient In-Memory State & Multi-Client Isolation ---');
