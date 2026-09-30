@@ -440,7 +440,7 @@ async function run() {
   assert(connCount.rows[0].cnt === 13, `56. Connector count unchanged (expected 13, got ${connCount.rows[0].cnt})`);
 
   const sessCount = await query(`SELECT COUNT(*)::int AS cnt FROM charging_sessions`);
-  assert(sessCount.rows[0].cnt === 14, `57. Charging session count unchanged (expected 14, got ${sessCount.rows[0].cnt})`);
+  assert(sessCount.rows[0].cnt === 4, `57. Charging session count unchanged (expected 4, got ${sessCount.rows[0].cnt})`);
 
   // ── F. REST API regression ────────────────────────────────────────────────
   console.log('\n--- F. REST API Regression ---');

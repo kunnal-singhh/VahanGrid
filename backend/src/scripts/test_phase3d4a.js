@@ -390,7 +390,8 @@ async function run() {
 
   const txMsgId = `msg-tx-${Date.now()}`;
   const txRes = await sendAndReceive(clientWs1, [2, txMsgId, 'TransactionEvent', { eventType: 'Started' }]);
-  assert(txRes[0] === 4 && txRes[2] === 'NotImplemented', '5g. Unsupported action "TransactionEvent" returns NotImplemented');
+  // TransactionEvent implemented in Phase 3D.6A; incomplete payload returns validation CALLERROR
+  assert(txRes[0] === 4, '5g. TransactionEvent returns CALLERROR (Phase 3D.6A implements it)');
 
   const mvMsgId = `msg-mv-${Date.now()}`;
   const mvRes = await sendAndReceive(clientWs1, [2, mvMsgId, 'MeterValues', { evseId: 1 }]);

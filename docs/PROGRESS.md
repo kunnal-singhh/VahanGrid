@@ -21,10 +21,71 @@
 | **Phase 3D.4A**| OCPP 2.0.1 StatusNotification (Schema & Transient State)    | ✅ Complete | `test_phase3d4a.js` (62/62 passed) |
 | **Phase 3D.4B**| Persistent OCPP Device & EVSE/Connector Mapping Layer       | ✅ Complete | `test_phase3d4b.js` (82/82 passed) |
 | **Phase 3D.5** | Persistent Device State, Heartbeat & Live Status Sync       | ✅ Complete | `test_phase3d5.js` (79/79 passed)  |
+| **Phase 3D.6A**| Persistent OCPP Transaction Layer & TransactionEvent Lifecycle | ✅ Complete | `test_phase3d6a.js` (76/76 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.6A — Persistent OCPP Transaction Layer & TransactionEvent Lifecycle
+- **Status:** Completed
+- **Date:** September 2026
+- **Commit:** `(pending — do not commit yet)`
+- **Test Suite:** `backend/src/scripts/test_phase3d6a.js` (76/76 tests passing)
+- **Compliance Notice:** *"VahanGrid persists OCPP 2.0.1 TransactionEvent (Started / Updated / Ended) in a decoupled `ocpp_transactions` table; the authoritative customer session (`charging_sessions`) is never fabricated without a user identity."*
+
+#### Architectural Design & Implementation:
+1. **Migration 015 (`015_create_ocpp_transactions.sql`):**
+   - Created `ocpp_transactions` table — the authoritative OCPP protocol ledger.
+   - Composite unique constraint `UNIQUE(ocpp_charge_point_id, transaction_id)` enforces that a `transaction_id` is scoped per charge point (OCPP 2.0.1 §7.4.2.2).
+   - Nullable FK `session_id → charging_sessions(id) ON DELETE SET NULL` enables optional bridging to customer sessions without forcing one.
+   - Nullable FK `connector_id → connectors(id) ON DELETE SET NULL` tracks the physical connector involved.
+   - Status check constraint: `'active' | 'completed' | 'aborted'`.
+   - **Zero modification** to `evses`, `connectors`, `locations`, `cpos`, `charging_sessions`, `users`, or `vehicles`.
+
+2. **TransactionEvent Handler (`backend/src/ocpp/handlers/transactionEventHandler.js`):**
+   - Routes `eventType` ∈ `{'Started', 'Updated', 'Ended'}` to dedicated sub-handlers.
+   - Performs full schema validation: `eventType`, `timestamp`, `triggerReason`, `seqNo` (non-negative integer), `transactionInfo.transactionId` (≤36 chars).
+
+3. **Started Event:**
+   - Validates `evse.id > 0` (evseId = 0 is charge-point-level and cannot start a transaction).
+   - Resolves physical connector via `ocppMappingService.resolveConnectorMapping()` / `resolveEvseMapping()` with fallback to first mapped connector.
+   - **Session bridging:** if an active REST `charging_sessions` row exists on the resolved connector, links `ocpp_transactions.session_id` and populates `charging_sessions.external_session_id = transactionId`.
+   - **No fabrication:** if no REST session exists, `session_id` remains `NULL`; `charging_sessions.user_id` is never set to a synthetic value.
+   - Transitions physical connector status `→ 'charging'` atomically inside a `BEGIN`/`COMMIT` transaction with `SELECT … FOR UPDATE` row locks.
+   - **Idempotency:** duplicate `Started` (same `(ocpp_charge_point_id, transaction_id)`) acknowledges with `CALLRESULT {}` without inserting duplicates.
+
+4. **Updated Event:**
+   - **Monotonic seqNo guard:** if `seqNo ≤ stored seq_no`, treats as stale/duplicate, acknowledges with `CALLRESULT {}`, no state mutation.
+   - Extracts `Energy.Active.Import.Register` from `meterValue[]` (Wh → kWh conversion).
+   - Uses `GREATEST(total_energy_kwh, $new)` to prevent energy regression on out-of-order delivery.
+   - Propagates energy to `charging_sessions.energy_kwh` only if the linked session is still `'active'`.
+
+5. **Ended Event:**
+   - **Idempotency:** already-terminal (`'completed'` or `'aborted'`) transactions acknowledge without state regression.
+   - Seqno guard applies: stale `seqNo < current` silently acknowledged.
+   - Sets `ocpp_transactions.status = 'completed'`, persists `ended_at`, `stopped_reason`.
+   - **Linked session finalization:** transitions linked `charging_sessions` to `'completed'` only if still `'active'` or `'pending'`; never resurrects already-`'stopped'` sessions (REST terminal state protection).
+   - Resets mapped connector `→ 'available'` only if no other active `ocpp_transactions` exist on that connector.
+
+6. **messageHandler.js Integration:**
+   - Added `import { handleTransactionEvent }` and routed `action === 'TransactionEvent'` with standard try/catch CALLERROR handling.
+   - Fallback unsupported-action error message updated from Phase 3D.5 to Phase 3D.6A scope.
+
+#### Regression Updates (3 suites):
+- **`test_phase3d5.js` test 64:** Updated assertion — `TransactionEvent` now returns a validation `CALLERROR` (not `NotImplemented`) since Phase 3D.6A implements the action.
+- **`test_phase3d4b.js` test 57** and **`test_phase3d4a.js` test 5g** and **`test_phase3d3.js` test 4h:** Same update pattern.
+- **Session seed count:** Orphaned test-run sessions cleaned; seed count corrected from 14 → 4 in affected assertions.
+
+#### Explicit Current Limitations:
+- `MeterValues` telemetry curve persistence is not yet implemented.
+- Tariff calculation, billing, and wallet deductions are not yet triggered by OCPP events.
+- Remote Start / Remote Stop commands (CSMS → charger direction) are not yet implemented.
+
+#### Next Phase:
+- **Phase 3D.6B — MeterValues Telemetry Curve Persistence** (or as directed by architecture review)
+
+---
 
 ### Phase 3D.5 — Persistent Device State, Heartbeat & Live Status Synchronization
 - **Status:** Completed
@@ -63,7 +124,7 @@
    - Changes applied via OCPP `StatusNotification` are immediately reflected in `GET /api/v1/stations` and `GET /api/v1/stations/:id` in real time with zero server restarts.
 
 #### Explicit Current Limitations:
-- `TransactionEvent` (`Started`, `Updated`, `Ended`) is not yet implemented.
+- `TransactionEvent` (`Started`, `Updated`, `Ended`) is implemented in Phase 3D.6A.
 - Real-time energy telemetry (`MeterValues`) is not yet implemented.
 - Billing, tariff calculation, and wallet deductions are not yet triggered by OCPP messages.
 

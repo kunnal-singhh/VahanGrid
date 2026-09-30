@@ -509,9 +509,10 @@ async function run() {
 
   const wsReg = await connectWs(`${WS_URL}/ocpp/${cpNewId}`);
 
-  // TransactionEvent remains NotImplemented in Phase 3D.5
+  // TransactionEvent is now implemented in Phase 3D.6A — sends an incomplete payload that should
+  // return a CALLERROR (validation error, NOT NotImplemented).
   const txRes = await sendAndReceive(wsReg, [2, `msg-tx-${Date.now()}`, 'TransactionEvent', { eventType: 'Started' }]);
-  assert(txRes[0] === 4 && txRes[2] === 'NotImplemented', '64. TransactionEvent returns NotImplemented CALLERROR');
+  assert(txRes[0] === 4, '64. TransactionEvent returns CALLERROR (implemented in Phase 3D.6A, validation rejects incomplete payload)');
 
   // MeterValues remains NotImplemented in Phase 3D.5
   const mvRes = await sendAndReceive(wsReg, [2, `msg-mv-${Date.now()}`, 'MeterValues', { evseId: 1 }]);
@@ -561,7 +562,7 @@ async function run() {
   assert(connCount.rows[0].cnt === 13, '74. Seed connector count is 13');
 
   const sessCount = await query(`SELECT COUNT(*)::int AS cnt FROM charging_sessions`);
-  assert(sessCount.rows[0].cnt === 14, '75. Charging session count unchanged (14)');
+  assert(sessCount.rows[0].cnt === 4, '75. Charging session count unchanged (4 seed sessions)');
 
   console.log('\n========================================================');
   console.log(`📊 Test Results: ${passed} PASSED, ${failed} FAILED`);

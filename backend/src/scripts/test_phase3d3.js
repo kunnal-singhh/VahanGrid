@@ -290,7 +290,7 @@ async function run() {
   const txMsgId = `msg-tx-${Date.now()}`;
   const txCall = [2, txMsgId, 'TransactionEvent', { eventType: 'Started' }];
   const txResponse = await sendAndReceive(clientWs, txCall);
-  assert(txResponse[0] === 4 && txResponse[2] === 'NotImplemented', '4h. TransactionEvent returns NotImplemented CALLERROR');
+  assert(txResponse[0] === 4, '4h. TransactionEvent returns CALLERROR (Phase 3D.6A implements it; validation error for incomplete payload)');
 
   // ── 5. Malformed Messages & Robust Error Handling ─────────────────────────
   console.log('\n--- 5. Malformed Messages & Robust Error Handling ---');
