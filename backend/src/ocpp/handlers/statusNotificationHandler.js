@@ -17,6 +17,8 @@
 
 import { OcppError, ERROR_CODES } from '../ocppErrors.js';
 import connectionRegistry from '../connectionRegistry.js';
+import { resolveConnectorMapping } from '../../services/ocppMappingService.js';
+import { query } from '../../config/database.js';
 
 // Valid ConnectorStatusEnumType values defined in OCPP 2.0.1 Part 2
 export const VALID_CONNECTOR_STATUSES = new Set([
@@ -26,6 +28,20 @@ export const VALID_CONNECTOR_STATUSES = new Set([
   'Unavailable',
   'Faulted',
 ]);
+
+// Unambiguous VahanGrid connector status mappings (Phase 3D.5).
+// "Available"   -> 'available'
+// "Reserved"    -> 'reserved'
+// "Unavailable" -> 'unavailable'
+// "Faulted"     -> 'faulted'
+// Note: 'Occupied' is intentionally excluded per Phase 3D.5 specification.
+// Occupied remains in transient state only until TransactionEvent provides transaction/charging semantics.
+const UNAMBIGUOUS_CONNECTOR_STATUS_MAP = {
+  Available: 'available',
+  Reserved: 'reserved',
+  Unavailable: 'unavailable',
+  Faulted: 'faulted',
+};
 
 /**
  * Handles an incoming StatusNotification CALL request.
@@ -147,7 +163,72 @@ export async function handleStatusNotification(payload, chargePointId, ws) {
     `[OCPP] [${chargePointId}] StatusNotification accepted — EVSE: ${evseId}, Connector: ${connectorId}, Status: "${cleanConnectorStatus}"`
   );
 
-  // ── 8. Generate OCPP 2.0.1 Response Payload ───────────────────────────────
+  // ── 8. Persist Status to Database (Phase 3D.5) ─────────────────────────────
+  if (evseId > 0 && connectorId > 0) {
+    try {
+      const mapping = await resolveConnectorMapping(chargePointId, evseId, connectorId);
+      if (mapping && mapping.connectorId) {
+        const vahanStatus = UNAMBIGUOUS_CONNECTOR_STATUS_MAP[cleanConnectorStatus];
+        if (vahanStatus) {
+          await query(
+            `UPDATE connectors
+             SET status = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [vahanStatus, mapping.connectorId]
+          );
+          console.log(
+            `[OCPP] [${chargePointId}] Mapped connector ${mapping.connectorId} (EVSE ${evseId}, Conn ${connectorId}) updated to status "${vahanStatus}" in DB`
+          );
+        } else {
+          // E.g. 'Occupied': Do NOT map Occupied to charging.
+          // Occupied must remain represented in the OCPP transient state until TransactionEvent provides transaction/charging semantics.
+          console.log(
+            `[OCPP] [${chargePointId}] Status "${cleanConnectorStatus}" retained in transient state only (not mapped to DB in Phase 3D.5)`
+          );
+        }
+      } else {
+        // Unmapped EVSE/connector identity
+        console.warn(
+          `[OCPP] [${chargePointId}] Unmapped EVSE/connector identity (EVSE ${evseId}, Conn ${connectorId}); transient state preserved without DB update.`
+        );
+      }
+    } catch (dbErr) {
+      console.error(
+        `[OCPP] [${chargePointId}] Failed to synchronize connector status to DB:`,
+        dbErr.message
+      );
+    }
+  } else if (evseId === 0) {
+    // For evseId = 0, update only the charge-point-level OCPP status. Do not propagate it automatically to all mapped EVSEs/connectors.
+    try {
+      let cpStatus = null;
+      if (cleanConnectorStatus === 'Available') cpStatus = 'online';
+      else if (cleanConnectorStatus === 'Unavailable') cpStatus = 'unavailable';
+      else if (cleanConnectorStatus === 'Faulted') cpStatus = 'maintenance';
+
+      if (cpStatus) {
+        await query(
+          `UPDATE ocpp_charge_points
+           SET status = $1,
+               last_seen_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE charge_point_id = $2`,
+          [cpStatus, chargePointId]
+        );
+        console.log(
+          `[OCPP] [${chargePointId}] Charge-point-level (evseId=0) status updated to "${cpStatus}" in DB`
+        );
+      }
+    } catch (dbErr) {
+      console.error(
+        `[OCPP] [${chargePointId}] Failed to update charge-point-level status in DB:`,
+        dbErr.message
+      );
+    }
+  }
+
+  // ── 9. Generate OCPP 2.0.1 Response Payload ───────────────────────────────
   // Per OCPP 2.0.1 specification, StatusNotificationResponse is an empty object {}.
   return {};
 }

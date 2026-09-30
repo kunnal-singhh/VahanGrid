@@ -260,18 +260,18 @@ async function run() {
   // ── 4. Unsupported Action Handling ────────────────────────────────────────
   console.log('\n--- 4. Unsupported Action Handling ---');
 
-  // 4a. Heartbeat CALL (Not implemented in Phase 3D.3)
-  const hbMsgId = `msg-hb-${Date.now()}`;
-  const hbCall = [2, hbMsgId, 'Heartbeat', {}];
-  const hbResponse = await sendAndReceive(clientWs, hbCall);
+  // 4a. Unsupported action CALL (e.g. Authorize, not implemented in Phase 3D.3/3D.5)
+  const authMsgId = `msg-auth-${Date.now()}`;
+  const authCall = [2, authMsgId, 'Authorize', { idToken: { idToken: 'TAG-1', type: 'ISO14443' } }];
+  const authResponse = await sendAndReceive(clientWs, authCall);
 
-  assert(Array.isArray(hbResponse), '4a. Heartbeat response is a JSON array');
-  assert(hbResponse[0] === 4, '4b. Response messageTypeId is 4 (CALLERROR)');
-  assert(hbResponse[1] === hbMsgId, `4c. Error response echoes messageId (${hbMsgId})`);
-  assert(hbResponse[2] === 'NotImplemented', `4d. Error code is "NotImplemented" (got "${hbResponse[2]}")`);
+  assert(Array.isArray(authResponse), '4a. Unsupported action response is a JSON array');
+  assert(authResponse[0] === 4, '4b. Response messageTypeId is 4 (CALLERROR)');
+  assert(authResponse[1] === authMsgId, `4c. Error response echoes messageId (${authMsgId})`);
+  assert(authResponse[2] === 'NotImplemented', `4d. Error code is "NotImplemented" (got "${authResponse[2]}")`);
   assert(
-    typeof hbResponse[3] === 'string' && hbResponse[3].includes('Heartbeat'),
-    '4e. Error description explains Heartbeat is not implemented'
+    typeof authResponse[3] === 'string' && authResponse[3].includes('Authorize'),
+    '4e. Error description explains Authorize is not implemented'
   );
 
   // 4b. MeterValues CALL (Not implemented in Phase 3D.3 / Phase 3D.4A)

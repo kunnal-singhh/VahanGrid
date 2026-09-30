@@ -19,10 +19,93 @@
 | **Phase 3D.2** | OCPP WebSocket Foundation (Gateway & Connection Registry)   | ✅ Complete | `test_phase3d2.js` (47/47 passed)  |
 | **Phase 3D.3** | OCPP 2.0.1 BootNotification (Request/Response & Schema)     | ✅ Complete | `test_phase3d3.js` (55/55 passed)  |
 | **Phase 3D.4A**| OCPP 2.0.1 StatusNotification (Schema & Transient State)    | ✅ Complete | `test_phase3d4a.js` (62/62 passed) |
+| **Phase 3D.4B**| Persistent OCPP Device & EVSE/Connector Mapping Layer       | ✅ Complete | `test_phase3d4b.js` (82/82 passed) |
+| **Phase 3D.5** | Persistent Device State, Heartbeat & Live Status Sync       | ✅ Complete | `test_phase3d5.js` (79/79 passed)  |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.5 — Persistent Device State, Heartbeat & Live Status Synchronization
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d5.js` (79/79 tests passing)
+- **Compliance Notice:** *"VahanGrid supports BootNotification, Heartbeat, and StatusNotification persistence with live connector status synchronization; full OCPP 2.0.1 compliance is in progress."*
+
+#### Architectural Design & Implementation:
+1. **Migration 014 (`014_add_last_seen_at_to_ocpp_charge_points.sql`):**
+   - Added `last_seen_at TIMESTAMPTZ` and index `idx_ocpp_charge_points_last_seen` to `ocpp_charge_points`.
+   - Existing domain tables (`locations`, `cpos`, `evses`, `connectors`, `charging_sessions`) remain strictly unmodified.
+
+2. **BootNotification Persistence (`backend/src/ocpp/handlers/bootNotificationHandler.js`):**
+   - Validates incoming `BootNotification` per OCPP 2.0.1 schema.
+   - For new charge points: creates record in `ocpp_charge_points` with default `registration_status = 'Pending'`.
+   - For existing charge points: updates metadata (`model`, `vendor_name`, `serial_number`, `firmware_version`, `boot_reason`, `last_boot_at`, `last_seen_at`, `status = 'online'`) while strictly preserving existing `registration_status` (`'Accepted'`, `'Pending'`, or `'Rejected'`).
+   - Retains standard OCPP response: `[3, "<messageId>", { "status": "Accepted", "interval": 300, "currentTime": "<ISO-8601>" }]`.
+
+3. **Heartbeat Protocol (`backend/src/ocpp/handlers/heartbeatHandler.js`):**
+   - Implements `[2, "<messageId>", "Heartbeat", {}]` CALL request.
+   - Validates payload structure and returns standard `[3, "<messageId>", { "currentTime": "<ISO-8601>" }]`.
+   - Known charge points: updates `last_seen_at = NOW()`, `status = 'online'`, and in-memory `connectionRegistry.updateHeartbeat(chargePointId)`.
+   - Unknown/unregistered devices: handled gracefully with standard `CALLRESULT` without throwing errors or dropping sockets.
+
+4. **StatusNotification $\rightarrow$ PostgreSQL Synchronization (`backend/src/ocpp/handlers/statusNotificationHandler.js`):**
+   - Enforces unambiguous connector status translation to PostgreSQL `connectors`:
+     - `Available` $\rightarrow$ `'available'`
+     - `Reserved` $\rightarrow$ `'reserved'`
+     - `Unavailable` $\rightarrow$ `'unavailable'`
+     - `Faulted` $\rightarrow$ `'faulted'`
+   - **Critical rule:** `Occupied` is **NOT** mapped to `'charging'`. Occupied remains represented in the transient `connectionRegistry` only until `TransactionEvent` provides actual charging session semantics.
+   - `evseId = 0`: updates `ocpp_charge_points.status` only; does not propagate to `connectors`.
+   - Unmapped EVSE/connector identities: preserved in transient memory, logs warning, returns normal `CALLRESULT` `{}`, never crashes WebSocket.
+
+5. **Live REST API Availability Reflection:**
+   - Changes applied via OCPP `StatusNotification` are immediately reflected in `GET /api/v1/stations` and `GET /api/v1/stations/:id` in real time with zero server restarts.
+
+#### Explicit Current Limitations:
+- `TransactionEvent` (`Started`, `Updated`, `Ended`) is not yet implemented.
+- Real-time energy telemetry (`MeterValues`) is not yet implemented.
+- Billing, tariff calculation, and wallet deductions are not yet triggered by OCPP messages.
+
+#### Next Phase:
+- **Phase 3D.6 — OCPP 2.0.1 TransactionEvent, Active Session Bridging & Energy Telemetry**
+
+---
+
+### Phase 3D.4B — Persistent OCPP Device & EVSE/Connector Mapping Layer
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d4b.js` (82/82 tests passing)
+- **Design Philosophy:** Dedicated mapping layer tables (`ocpp_charge_points`, `ocpp_evse_mappings`, `ocpp_connector_mappings`). Zero modification to existing VahanGrid domain entities (`evses`, `connectors`, `locations`, `cpos`, `charging_sessions`).
+
+#### Architectural Design & Implementation:
+1. **Migration 011 (`011_create_ocpp_charge_points.sql`):**
+   - Device registry table for physical OCPP charging cabinets.
+   - `id UUID PRIMARY KEY`, `charge_point_id VARCHAR(255) NOT NULL UNIQUE`, `location_id UUID REFERENCES locations(id) ON DELETE SET NULL`.
+   - Hardware metadata: `model`, `vendor_name`, `serial_number`, `firmware_version`, `boot_reason`.
+   - Enum checks: `registration_status IN ('Accepted', 'Pending', 'Rejected')`, `status IN ('online', 'offline', 'unavailable', 'maintenance')`.
+
+2. **Migration 012 (`012_create_ocpp_evse_mappings.sql`):**
+   - EVSE identity translation table.
+   - `id UUID PRIMARY KEY`, `charge_point_id UUID NOT NULL REFERENCES ocpp_charge_points(id) ON DELETE CASCADE`.
+   - `ocpp_evse_id INTEGER NOT NULL`, `evse_id UUID NOT NULL REFERENCES evses(id) ON DELETE RESTRICT`.
+   - Constraints: `UNIQUE (charge_point_id, ocpp_evse_id)`, `UNIQUE (evse_id)`, `CHECK (ocpp_evse_id > 0)`.
+
+3. **Migration 013 (`013_create_ocpp_connector_mappings.sql`):**
+   - Connector identity translation table.
+   - `id UUID PRIMARY KEY`, `ocpp_evse_mapping_id UUID NOT NULL REFERENCES ocpp_evse_mappings(id) ON DELETE CASCADE`.
+   - `ocpp_connector_id INTEGER NOT NULL`, `connector_id UUID NOT NULL REFERENCES connectors(id) ON DELETE RESTRICT`.
+   - Constraints: `UNIQUE (ocpp_evse_mapping_id, ocpp_connector_id)`, `UNIQUE (connector_id)`, `CHECK (ocpp_connector_id > 0)`.
+
+4. **Lookup Service (`backend/src/services/ocppMappingService.js`):**
+   - Pure read-only lookup translation functions:
+     - `resolveChargePoint(chargePointId)`: Translates chargePointId to device metadata row.
+     - `resolveEvseMapping(chargePointId, ocppEvseId)`: Resolves to VahanGrid EVSE UUID.
+     - `resolveConnectorMapping(chargePointId, ocppEvseId, ocppConnectorId)`: Resolves to VahanGrid connector UUID.
+     - `getFullMapping(chargePointId)`: Full mapping tree for introspection/diagnostics.
+   - Read-only contract: does not modify or mutate connector status or sessions in this phase.
+
+---
 
 ### Phase 3D.4A — OCPP 2.0.1 StatusNotification
 - **Status:** Completed

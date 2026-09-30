@@ -512,9 +512,9 @@ async function run() {
   }
   assert(!dbModified, '73. StatusNotification still does NOT modify PostgreSQL connector state');
 
-  // Unsupported action
+  // Unsupported action (Authorize is not implemented in Phase 3D.4B/3D.5)
   const unsupRes = await sendAndReceive(ws, [
-    2, `msg-unsup-${Date.now()}`, 'Heartbeat', {},
+    2, `msg-unsup-${Date.now()}`, 'Authorize', { idToken: { idToken: 'TAG-1', type: 'ISO14443' } },
   ]);
   assert(unsupRes[0] === 4, '74. Unsupported action returns CALLERROR (type 4)');
   assert(unsupRes[2] === 'NotImplemented', '75. CALLERROR code is NotImplemented');

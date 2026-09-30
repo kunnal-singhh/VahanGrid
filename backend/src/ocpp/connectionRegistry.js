@@ -134,6 +134,41 @@ class ConnectionRegistry {
   }
 
   /**
+   * Updates the in-memory entry for a charge point with Heartbeat data (Phase 3D.5).
+   *
+   * @param {string} chargePointId
+   * @returns {object|null} The updated entry, or null if charge point is not registered
+   */
+  updateHeartbeat(chargePointId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    const heartbeatAt = new Date();
+    entry.lastHeartbeatAt = heartbeatAt;
+    entry.status = 'online';
+
+    if (entry.ws) {
+      entry.ws.lastHeartbeatAt = heartbeatAt;
+      entry.ws.status = 'online';
+    }
+
+    return entry;
+  }
+
+  /**
+   * Retrieves the latest Heartbeat timestamp for a registered charge point.
+   *
+   * @param {string} chargePointId
+   * @returns {Date|null}
+   */
+  getLastHeartbeat(chargePointId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    return entry ? entry.lastHeartbeatAt || null : null;
+  }
+
+  /**
    * Updates the in-memory entry for a charge point with StatusNotification data.
    *
    * @param {string} chargePointId

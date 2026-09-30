@@ -16,6 +16,7 @@
 
 import { OcppError, ERROR_CODES } from '../ocppErrors.js';
 import connectionRegistry from '../connectionRegistry.js';
+import { query } from '../../config/database.js';
 
 // Valid BootReasonEnumType values defined in OCPP 2.0.1 Part 2
 const VALID_BOOT_REASONS = new Set([
@@ -153,7 +154,61 @@ export async function handleBootNotification(payload, chargePointId, ws) {
     `[OCPP] [${chargePointId}] BootNotification accepted — Model: "${model.trim()}", Vendor: "${vendorName.trim()}", Reason: "${reason}"`
   );
 
-  // ── 5. Generate OCPP 2.0.1 Response Payload ───────────────────────────────
+  // ── 5. Persist to Database (Phase 3D.5) ────────────────────────────────────
+  try {
+    const existing = await query(
+      `SELECT id, registration_status FROM ocpp_charge_points WHERE charge_point_id = $1`,
+      [chargePointId]
+    );
+
+    if (existing.rows.length === 0) {
+      await query(
+        `INSERT INTO ocpp_charge_points (
+           charge_point_id, model, vendor_name, serial_number, firmware_version,
+           boot_reason, registration_status, last_boot_at, last_seen_at, status, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'Pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'online', CURRENT_TIMESTAMP)`,
+        [
+          chargePointId,
+          model.trim(),
+          vendorName.trim(),
+          serialNumber ? serialNumber.trim() : null,
+          firmwareVersion ? firmwareVersion.trim() : null,
+          reason,
+        ]
+      );
+      console.log(`[OCPP] [${chargePointId}] New charge point registered in DB with status "Pending"`);
+    } else {
+      // Preserve existing registration_status — do not overwrite with 'Accepted' or 'Pending'
+      await query(
+        `UPDATE ocpp_charge_points
+         SET model = $2,
+             vendor_name = $3,
+             serial_number = COALESCE($4, serial_number),
+             firmware_version = COALESCE($5, firmware_version),
+             boot_reason = $6,
+             last_boot_at = CURRENT_TIMESTAMP,
+             last_seen_at = CURRENT_TIMESTAMP,
+             status = 'online',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE charge_point_id = $1`,
+        [
+          chargePointId,
+          model.trim(),
+          vendorName.trim(),
+          serialNumber ? serialNumber.trim() : null,
+          firmwareVersion ? firmwareVersion.trim() : null,
+          reason,
+        ]
+      );
+      console.log(
+        `[OCPP] [${chargePointId}] Existing charge point updated in DB (registration_status "${existing.rows[0].registration_status}" preserved)`
+      );
+    }
+  } catch (dbErr) {
+    console.error(`[OCPP] [${chargePointId}] Failed to persist BootNotification to DB:`, dbErr.message);
+  }
+
+  // ── 6. Generate OCPP 2.0.1 Response Payload ───────────────────────────────
   // Note: currentTime must reflect real current server time (ISO 8601), not hardcoded.
   return {
     currentTime: new Date().toISOString(),

@@ -44,7 +44,9 @@ export async function resolveChargePoint(chargePointId) {
   if (!chargePointId || typeof chargePointId !== 'string') return null;
 
   const result = await query(
-    `SELECT id, charge_point_id, location_id, registration_status, status
+    `SELECT id, charge_point_id, location_id, model, vendor_name, serial_number,
+            firmware_version, boot_reason, registration_status, last_boot_at,
+            last_seen_at, status, created_at, updated_at
      FROM ocpp_charge_points
      WHERE charge_point_id = $1`,
     [chargePointId]

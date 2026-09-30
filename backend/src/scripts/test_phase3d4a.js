@@ -384,9 +384,9 @@ async function run() {
   assert(resEmptyId[0] === 4 && resEmptyId[2] === 'RpcFrameworkError', '5e. Empty messageId returns RpcFrameworkError');
 
   // 5f. Unsupported actions
-  const hbMsgId = `msg-hb-${Date.now()}`;
-  const hbRes = await sendAndReceive(clientWs1, [2, hbMsgId, 'Heartbeat', {}]);
-  assert(hbRes[0] === 4 && hbRes[2] === 'NotImplemented', '5f. Unsupported action "Heartbeat" returns NotImplemented');
+  const authMsgId = `msg-auth-${Date.now()}`;
+  const authRes = await sendAndReceive(clientWs1, [2, authMsgId, 'Authorize', { idToken: { idToken: 'TAG-1', type: 'ISO14443' } }]);
+  assert(authRes[0] === 4 && authRes[2] === 'NotImplemented', '5f. Unsupported action "Authorize" returns NotImplemented');
 
   const txMsgId = `msg-tx-${Date.now()}`;
   const txRes = await sendAndReceive(clientWs1, [2, txMsgId, 'TransactionEvent', { eventType: 'Started' }]);
