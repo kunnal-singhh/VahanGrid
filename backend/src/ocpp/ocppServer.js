@@ -15,6 +15,7 @@
 
 import { WebSocketServer } from 'ws';
 import connectionRegistry from './connectionRegistry.js';
+import { handleOcppMessage } from './messageHandler.js';
 
 let wssInstance = null;
 
@@ -137,11 +138,13 @@ export function initOcppServer(httpServer, options = {}) {
     // Register in live in-memory registry (supersedes any duplicate previous connection)
     connectionRegistry.register(cpId, ws);
 
-    // Message handler: Phase 3D.2 foundation only
-    // Safely log/ignore without fabricating OCPP business responses
-    ws.on('message', (message, isBinary) => {
-      const length = Buffer.isBuffer(message) ? message.length : message.toString().length;
-      console.log(`[OCPP] [${cpId}] Received data (${length} bytes, binary: ${isBinary}) — ignored in Phase 3D.2 foundation`);
+    // Message handler: dispatch to OCPP router (Phase 3D.3 BootNotification)
+    ws.on('message', async (message) => {
+      try {
+        await handleOcppMessage(message, cpId, ws);
+      } catch (err) {
+        console.error(`[OCPP] [${cpId}] Unhandled message error:`, err);
+      }
     });
 
     // Handle socket errors cleanly without crashing Express

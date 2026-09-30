@@ -17,10 +17,63 @@
 | **Phase 3C.4A**| Wallet Read & Transaction History API (Backend Signed Ledger) | ✅ Complete | `test_phase3c4a.js` (44/44 passed) |
 | **Phase 3C.4B**| Frontend Wallet Integration (Real REST Client, Dynamic Currency) | ✅ Complete | `test_phase3c4b.js` (40/40 passed) |
 | **Phase 3D.2** | OCPP WebSocket Foundation (Gateway & Connection Registry)   | ✅ Complete | `test_phase3d2.js` (47/47 passed)  |
+| **Phase 3D.3** | OCPP 2.0.1 BootNotification (Request/Response & Schema)     | ✅ Complete | `test_phase3d3.js` (55/55 passed)  |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.3 — OCPP 2.0.1 BootNotification
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d3.js` (55/55 tests passing)
+- **Compliance Notice:** *"VahanGrid currently supports BootNotification handling only; this does not constitute full OCPP 2.0.1 compliance."*
+
+#### Architectural Design & Implementation:
+1. **OCPP Message Router (`backend/src/ocpp/messageHandler.js`):**
+   - Implemented standards-compliant JSON-RPC frame validator for OCPP-J 2.0.1:
+     - `CALL` `[2, "<MessageId>", "<Action>", {<Payload>}]`
+     - `CALLRESULT` `[3, "<MessageId>", {<Payload>}]`
+     - `CALLERROR` `[4, "<MessageId>", "<ErrorCode>", "<ErrorDescription>", {<ErrorDetails>}]`
+   - Validates message type ID (`2`), non-empty message ID (<= 36 chars), non-empty action string, and object payload.
+   - Standard OCPP error codes defined in [`ocppErrors.js`](file:///c:/Users/kunal%20singh/OneDrive/Desktop/VahanGrid/backend/src/ocpp/ocppErrors.js).
+
+2. **BootNotification Request Handler (`backend/src/ocpp/handlers/bootNotificationHandler.js`):**
+   - Validates required OCPP 2.0.1 fields:
+     - `reason`: required enum (`ApplicationReset`, `FirmwareUpdate`, `LocalReset`, `PowerUp`, `RemoteReset`, `ScheduledReset`, `Triggered`, `Unknown`, `Watchdog`). Missing or invalid reason returns `FormatViolation` / `PropertyConstraintViolation`.
+     - `chargingStation`: required object.
+       - `model`: required string (1-20 chars).
+       - `vendorName`: required string (1-50 chars).
+       - `serialNumber`: optional string (<= 25 chars).
+       - `firmwareVersion`: optional string (<= 50 chars).
+       - `modem`: optional object.
+
+3. **Charge-Point ID Consistency:**
+   - Authoritative identity is established by the WebSocket connection path (`/ocpp/<charge-point-id>`).
+   - If payload provides an explicit `chargePointId`, `stationId`, or `chargingStation.id` that contradicts the path identity, the request is rejected with `PropertyConstraintViolation`.
+
+4. **Response Behavior:**
+   - Returns a `CALLRESULT` echoing the exact incoming `messageId`.
+   - Response payload:
+     - `currentTime`: dynamic, real current server time in ISO 8601 (`new Date().toISOString()`), never hardcoded.
+     - `interval`: `300` (heartbeat interval in seconds).
+     - `status`: `"Accepted"`.
+
+5. **Transient Registration State:**
+   - In-memory association in [`connectionRegistry.js`](file:///c:/Users/kunal%20singh/OneDrive/Desktop/VahanGrid/backend/src/ocpp/connectionRegistry.js) via `updateBootNotification(chargePointId, bootData)`.
+   - Stores `reason`, `chargingStation`, `registrationStatus: 'Accepted'`, and `bootstrappedAt: new Date()`.
+   - Strictly in-memory — no database tables or persistent writes in this phase.
+
+6. **Malformed & Unsupported Message Handling:**
+   - Invalid JSON, empty messages, and non-array frames safely return `CALLERROR` with `RpcFrameworkError`.
+   - Unsupported actions (e.g. `Heartbeat`, `StatusNotification`, `TransactionEvent`, `MeterValues`) return `CALLERROR` with `NotImplemented` without fabricating success responses.
+   - Sockets remain stable and open after errors; subsequent valid `BootNotification` calls succeed immediately.
+
+7. **Current Limitations:**
+   - MeterValues, TransactionEvent, Heartbeat, and remote charging commands are not yet implemented.
+   - Persistent database registration and station matching are scheduled for subsequent OCPP phases.
+
+---
 
 ### Phase 3D.2 — OCPP WebSocket Foundation
 - **Status:** Completed

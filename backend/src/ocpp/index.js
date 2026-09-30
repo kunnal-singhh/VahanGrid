@@ -15,3 +15,21 @@ export {
   connectionRegistry,
   ConnectionRegistry,
 } from './connectionRegistry.js';
+
+export {
+  handleOcppMessage,
+  sendCallResult,
+  sendCallError,
+  MESSAGE_TYPE_CALL,
+  MESSAGE_TYPE_CALLRESULT,
+  MESSAGE_TYPE_CALLERROR,
+} from './messageHandler.js';
+
+export {
+  handleBootNotification,
+} from './handlers/bootNotificationHandler.js';
+
+export {
+  OcppError,
+  ERROR_CODES,
+} from './ocppErrors.js';

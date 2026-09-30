@@ -98,6 +98,42 @@ class ConnectionRegistry {
   }
 
   /**
+   * Updates the in-memory entry for a charge point with BootNotification data.
+   *
+   * @param {string} chargePointId
+   * @param {object} bootData - BootNotification details (reason, chargingStation, status)
+   * @returns {object|null} The updated entry, or null if charge point is not registered
+   */
+  updateBootNotification(chargePointId, bootData) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    if (!entry) return null;
+
+    entry.bootNotification = bootData;
+    entry.registrationStatus = bootData.status || 'Accepted';
+    entry.bootstrappedAt = new Date();
+
+    // Attach to websocket instance for direct access
+    entry.ws.bootNotification = entry.bootNotification;
+    entry.ws.registrationStatus = entry.registrationStatus;
+    entry.ws.bootstrappedAt = entry.bootstrappedAt;
+
+    return entry;
+  }
+
+  /**
+   * Retrieves BootNotification data for a registered charge point.
+   *
+   * @param {string} chargePointId
+   * @returns {object|null}
+   */
+  getBootNotification(chargePointId) {
+    if (!chargePointId) return null;
+    const entry = this.connections.get(chargePointId);
+    return entry ? entry.bootNotification || null : null;
+  }
+
+  /**
    * Checks if an active connection exists for the chargePointId.
    *
    * @param {string} chargePointId
