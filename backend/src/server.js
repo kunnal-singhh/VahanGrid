@@ -20,6 +20,7 @@
 import config from './config/env.js';
 import { checkDatabaseConnection } from './config/database.js';
 import app from './app.js';
+import { initOcppServer, closeOcppServer } from './ocpp/index.js';
 
 const { port, nodeEnv } = config;
 
@@ -50,14 +51,19 @@ async function startServer() {
   // ── 2. Start HTTP server ───────────────────────────────────────────────────
   const server = app.listen(port, () => {
     console.log(`[startup] ✅ HTTP server listening on http://localhost:${port}`);
-    console.log(`[startup]    Health endpoint: http://localhost:${port}/api/v1/health\n`);
+    console.log(`[startup]    Health endpoint: http://localhost:${port}/api/v1/health`);
+    console.log(`[startup]    OCPP WebSocket:  ws://localhost:${port}/ocpp/<charge-point-id>\n`);
   });
 
-  // ── 3. Graceful shutdown ───────────────────────────────────────────────────
+  // ── 3. Initialize OCPP WebSocket Gateway ──────────────────────────────────
+  initOcppServer(server);
+
+  // ── 4. Graceful shutdown ───────────────────────────────────────────────────
   // When the process receives SIGTERM (e.g. from Docker or a process manager),
   // stop accepting new connections but let in-flight requests finish.
   function shutdown(signal) {
     console.log(`\n[shutdown] Received ${signal} — shutting down gracefully…`);
+    closeOcppServer();
     server.close(() => {
       console.log('[shutdown] HTTP server closed. Goodbye.');
       process.exit(0);

@@ -16,10 +16,43 @@
 | **Phase 3C.3** | Frontend Charging Session Lifecycle Integration | ✅ Complete | `test_phase3c3.js` (34/34 passed) |
 | **Phase 3C.4A**| Wallet Read & Transaction History API (Backend Signed Ledger) | ✅ Complete | `test_phase3c4a.js` (44/44 passed) |
 | **Phase 3C.4B**| Frontend Wallet Integration (Real REST Client, Dynamic Currency) | ✅ Complete | `test_phase3c4b.js` (40/40 passed) |
+| **Phase 3D.2** | OCPP WebSocket Foundation (Gateway & Connection Registry)   | ✅ Complete | `test_phase3d2.js` (47/47 passed)  |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.2 — OCPP WebSocket Foundation
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d2.js` (47/47 tests passing)
+- **Scope Notice:** This phase implements ONLY the WebSocket connectivity foundation. It does NOT yet implement OCPP 2.0.1 business messages (BootNotification, Heartbeat, StatusNotification, MeterValues, etc.), telemetry, billing, or database persistence.
+
+#### Architectural Design & Implementation:
+1. **Dedicated Module (`backend/src/ocpp/`):**
+   - [`connectionRegistry.js`](file:///c:/Users/kunal%20singh/OneDrive/Desktop/VahanGrid/backend/src/ocpp/connectionRegistry.js): In-memory transient connection registry supporting `register(chargePointId, ws)`, `get(chargePointId)`, `remove(chargePointId, [ws])`, and `has(chargePointId)`. Not persisted to PostgreSQL.
+   - [`ocppServer.js`](file:///c:/Users/kunal%20singh/OneDrive/Desktop/VahanGrid/backend/src/ocpp/ocppServer.js): WebSocket server gateway integrating with the existing Node.js HTTP server (shares port 3001, no second port required). Intercepts HTTP Upgrade requests on path `/ocpp/:chargePointId`.
+   - [`index.js`](file:///c:/Users/kunal%20singh/OneDrive/Desktop/VahanGrid/backend/src/ocpp/index.js): Public module exports for the OCPP subsystem.
+
+2. **WebSocket Endpoint & Charge-Point Identity:**
+   - **Endpoint URL:** `ws://localhost:3001/ocpp/<charge-point-id>`
+   - Charge-point identity is parsed strictly from the path (`/ocpp/:chargePointId`), independent of database user IDs, vehicle IDs, or connector IDs.
+   - Malformed paths (e.g. `/ocpp`, `/ocpp/`, `/ocpp/CP/extra`) are rejected with `HTTP 400 Bad Request` without establishing a WebSocket connection.
+
+3. **Deterministic Duplicate Connection Handling:**
+   - If a charge point connects with a `chargePointId` that is already active in the registry, the server gracefully closes the previous socket with close code `4001` and reason `'Superseded by new connection'`.
+   - The new socket immediately takes over as the active connection in the registry.
+   - A race-condition guard ensures the old socket's `close` event does not evict the newly registered connection.
+
+4. **Connection Lifecycle & Message Handling:**
+   - **Connect:** Socket is upgraded, validated, added to `connectionRegistry`, and logged.
+   - **Message:** Incoming data is received, logged safely, and acknowledged without fabricating OCPP business responses.
+   - **Disconnect / Error:** Clean removal from `connectionRegistry`, safe error logging without crashing Express.
+
+5. **Existing REST Regression:**
+   - Full regression verified across `GET /api/v1/health`, auth, users, vehicles, stations, sessions, and wallet. All existing APIs continue to function normally.
+
+---
 
 ### Phase 3C.4B — Frontend Wallet Integration
 - **Status:** Completed
