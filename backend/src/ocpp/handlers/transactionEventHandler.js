@@ -1,7 +1,7 @@
 /**
  * src/ocpp/handlers/transactionEventHandler.js
  *
- * OCPP 2.0.1 TransactionEvent Request Handler (Phase 3D.6A).
+ * OCPP 2.0.1 TransactionEvent Request Handler (Phase 3D.6A / 3D.6B).
  *
  * Responsibilities:
  *  1. Validates TransactionEventRequest schema according to OCPP 2.0.1 specification.
@@ -13,7 +13,14 @@
  *     - If no session exists: preserves session_id = NULL (never invents a user).
  *  5. Enforces monotonic seqNo ordering and idempotency protection against duplicates.
  *  6. Synchronizes physical connector status (Started -> 'charging', Ended -> 'available').
- *  7. Returns standard OCPP 2.0.1 CALLRESULT {}.
+ *  7. Phase 3D.6B: Safely processes energy information carried in TransactionEvent meterValue[]:
+ *     - Focuses strictly on "Energy.Active.Import.Register" (in Wh / kWh).
+ *     - Validates measurand, unit, numeric value, timestamp, and structure.
+ *     - Distinguishes cumulative meter register reading from session net energy consumed:
+ *       Started captures baseline meter_start_wh.
+ *       Updated / Ended records meter_stop_wh and computes total_energy_kwh as delta / 1000.
+ *     - Synchronizes net energy with linked active charging_sessions without corrupting state.
+ *  8. Returns standard OCPP 2.0.1 CALLRESULT {}.
  */
 
 import { OcppError, ERROR_CODES } from '../ocppErrors.js';
@@ -25,6 +32,88 @@ import {
 } from '../../services/ocppMappingService.js';
 
 const VALID_EVENT_TYPES = new Set(['Started', 'Updated', 'Ended']);
+
+/**
+ * Parse and validate energy meter reading in Wh from an OCPP 2.0.1 meterValue array or object.
+ *
+ * Requirements:
+ * - Focuses strictly on measurand "Energy.Active.Import.Register".
+ * - If measurand is omitted or null/undefined, defaults to "Energy.Active.Import.Register" (per OCPP 2.0.1 spec).
+ * - Supported units: Wh (default), kWh (converted to Wh).
+ * - Non-energy measurands (Power, Current, SoC, Voltage, etc.) or unsupported units (W, A, V, var, etc.) are safely ignored.
+ * - Value must be a valid, finite non-negative number.
+ * - If timestamp is provided, it must be a valid ISO 8601 string.
+ *
+ * @param {Array<object>|object} meterValue - OCPP 2.0.1 meterValue payload
+ * @returns {number|null} Cumulative meter reading in Wh, or null if no valid reading found.
+ */
+export function parseMeterReadingWh(meterValue) {
+  if (!meterValue) return null;
+  const mvList = Array.isArray(meterValue) ? meterValue : [meterValue];
+  if (mvList.length === 0) return null;
+
+  let latestReadingWh = null;
+
+  for (const mv of mvList) {
+    if (!mv || typeof mv !== 'object' || Array.isArray(mv)) continue;
+
+    // Validate timestamp if present
+    if (mv.timestamp !== undefined && mv.timestamp !== null) {
+      if (typeof mv.timestamp !== 'string') continue;
+      const d = new Date(mv.timestamp);
+      if (isNaN(d.getTime())) continue;
+    }
+
+    if (!Array.isArray(mv.sampledValue)) continue;
+
+    for (const sv of mv.sampledValue) {
+      if (!sv || typeof sv !== 'object' || Array.isArray(sv)) continue;
+
+      // Measurand: Default in OCPP 2.0.1 is 'Energy.Active.Import.Register'
+      let measurand = 'Energy.Active.Import.Register';
+      if (sv.measurand !== undefined && sv.measurand !== null) {
+        if (typeof sv.measurand !== 'string') continue;
+        measurand = sv.measurand.trim();
+      }
+
+      if (measurand !== 'Energy.Active.Import.Register') {
+        continue;
+      }
+
+      // Value validation
+      if (sv.value === undefined || sv.value === null || sv.value === '') continue;
+      const num = typeof sv.value === 'number' ? sv.value : parseFloat(sv.value);
+      if (!Number.isFinite(num) || num < 0) continue;
+
+      // Unit validation
+      let rawUnit = 'Wh';
+      if (sv.unitOfMeasure !== undefined && sv.unitOfMeasure !== null) {
+        if (typeof sv.unitOfMeasure === 'string') {
+          rawUnit = sv.unitOfMeasure.trim();
+        } else if (typeof sv.unitOfMeasure === 'object' && typeof sv.unitOfMeasure.unit === 'string') {
+          rawUnit = sv.unitOfMeasure.unit.trim();
+        } else {
+          continue;
+        }
+      }
+
+      const unitLower = rawUnit.toLowerCase();
+      let whVal = null;
+      if (unitLower === 'wh' || unitLower === 'w.h' || unitLower === 'w·h') {
+        whVal = num;
+      } else if (unitLower === 'kwh' || unitLower === 'kw.h' || unitLower === 'kw·h') {
+        whVal = num * 1000.0;
+      } else {
+        // Unsupported unit for active energy register (e.g. W, kW, A, V, Percent, Celsius, kvarh)
+        continue;
+      }
+
+      latestReadingWh = whVal;
+    }
+  }
+
+  return latestReadingWh;
+}
 
 /**
  * Main handler for OCPP 2.0.1 TransactionEvent CALL messages.
@@ -160,6 +249,7 @@ export async function handleTransactionEvent(payload, chargePointId, ws) {
       chargingState: chargingState ? chargingState.trim() : null,
       idToken,
       evse,
+      meterValue,
     });
   } else if (eventType === 'Updated') {
     return await handleUpdatedEvent({
@@ -182,6 +272,7 @@ export async function handleTransactionEvent(payload, chargePointId, ws) {
       triggerReason: triggerReason.trim(),
       stoppedReason: stoppedReason ? stoppedReason.trim() : null,
       chargingState: chargingState ? chargingState.trim() : null,
+      meterValue,
     });
   }
 
@@ -202,6 +293,7 @@ async function handleStartedEvent({
   chargingState,
   idToken,
   evse,
+  meterValue,
 }) {
   // Validate EVSE object for Started event
   if (!evse || typeof evse !== 'object' || Array.isArray(evse)) {
@@ -274,6 +366,9 @@ async function handleStartedEvent({
 
   const physicalConnectorUUID = mapping.connectorId;
 
+  // Extract starting meter reading if present (Phase 3D.6B)
+  const startMeterWh = parseMeterReadingWh(meterValue);
+
   // Start database transaction with row locking
   const client = await pool.connect();
   try {
@@ -326,14 +421,15 @@ async function handleStartedEvent({
       );
     }
 
-    // 4. Insert into ocpp_transactions
+    // 4. Insert into ocpp_transactions (with meter_start_wh populated)
     await client.query(
       `INSERT INTO ocpp_transactions (
          ocpp_charge_point_id, transaction_id, seq_no,
          ocpp_evse_id, ocpp_connector_id, connector_id,
          session_id, id_token, id_token_type,
-         charging_state, trigger_reason, started_at, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active')`,
+         charging_state, trigger_reason, started_at, status,
+         meter_start_wh
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active', $13)`,
       [
         ocppChargePointUUID,
         transactionId,
@@ -347,6 +443,7 @@ async function handleStartedEvent({
         chargingState || 'Charging',
         triggerReason,
         parsedTimestamp,
+        startMeterWh,
       ]
     );
 
@@ -362,7 +459,7 @@ async function handleStartedEvent({
     await client.query('COMMIT');
 
     console.log(
-      `[OCPP] [${chargePointId}] TransactionEvent(Started) processed — tx: "${transactionId}", connector: ${physicalConnectorUUID}, status: charging`
+      `[OCPP] [${chargePointId}] TransactionEvent(Started) processed — tx: "${transactionId}", connector: ${physicalConnectorUUID}, startMeter: ${startMeterWh !== null ? startMeterWh + ' Wh' : 'null'}, status: charging`
     );
 
     return {};
@@ -394,7 +491,7 @@ async function handleUpdatedEvent({
 
     // Lock transaction record by (ocpp_charge_point_id, transaction_id)
     const txRes = await client.query(
-      `SELECT id, seq_no, status, session_id, connector_id FROM ocpp_transactions
+      `SELECT id, seq_no, status, session_id, connector_id, meter_start_wh, total_energy_kwh FROM ocpp_transactions
        WHERE ocpp_charge_point_id = $1 AND transaction_id = $2
        FOR UPDATE`,
       [ocppChargePointUUID, transactionId]
@@ -419,48 +516,41 @@ async function handleUpdatedEvent({
       return {};
     }
 
-    // Extract energy if meterValue is present
-    let totalEnergyKwh = null;
-    if (meterValue && Array.isArray(meterValue) && meterValue.length > 0) {
-      for (const mv of meterValue) {
-        if (mv.sampledValue && Array.isArray(mv.sampledValue)) {
-          for (const sv of mv.sampledValue) {
-            const measurand = sv.measurand || 'Energy.Active.Import.Register';
-            if (measurand === 'Energy.Active.Import.Register') {
-              const val = parseFloat(sv.value);
-              if (!isNaN(val)) {
-                const unit = sv.unitOfMeasure?.unit || 'Wh';
-                totalEnergyKwh = unit.toLowerCase() === 'kwh' ? val : val / 1000.0;
-              }
-            }
-          }
-        }
-      }
-    }
+    // Extract energy if valid Energy.Active.Import.Register meterValue is present (Phase 3D.6B)
+    const currentMeterWh = parseMeterReadingWh(meterValue);
 
-    // Update ocpp_transactions record
-    if (totalEnergyKwh !== null) {
+    if (currentMeterWh !== null) {
+      // Distinguish cumulative meter reading from session net energy consumed
+      const startWh = currentTx.meter_start_wh !== null ? parseFloat(currentTx.meter_start_wh) : 0;
+      const consumedWh = Math.max(0, currentMeterWh - startWh);
+      const consumedKwh = consumedWh / 1000.0;
+
       await client.query(
         `UPDATE ocpp_transactions
          SET seq_no = $1,
              trigger_reason = $2,
              charging_state = COALESCE($3, charging_state),
-             total_energy_kwh = GREATEST(total_energy_kwh, $4),
+             meter_stop_wh = $4,
+             total_energy_kwh = GREATEST(total_energy_kwh, $5),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5`,
-        [seqNo, triggerReason, chargingState, totalEnergyKwh, currentTx.id]
+         WHERE id = $6`,
+        [seqNo, triggerReason, chargingState, currentMeterWh, consumedKwh, currentTx.id]
       );
 
-      // If linked to a VahanGrid session, update energy on charging_sessions if active
+      // If linked to a VahanGrid session, synchronize energy on charging_sessions if active
       if (currentTx.session_id) {
         await client.query(
           `UPDATE charging_sessions
            SET energy_kwh = GREATEST(energy_kwh, $1),
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $2 AND status = 'active'`,
-          [totalEnergyKwh, currentTx.session_id]
+          [consumedKwh, currentTx.session_id]
         );
       }
+
+      console.log(
+        `[OCPP] [${chargePointId}] TransactionEvent(Updated) energy synced — tx: "${transactionId}", meter: ${currentMeterWh} Wh, net: ${consumedKwh} kWh`
+      );
     } else {
       await client.query(
         `UPDATE ocpp_transactions
@@ -501,6 +591,7 @@ async function handleEndedEvent({
   triggerReason,
   stoppedReason,
   chargingState,
+  meterValue,
 }) {
   const client = await pool.connect();
   try {
@@ -508,7 +599,7 @@ async function handleEndedEvent({
 
     // Lock transaction record by (ocpp_charge_point_id, transaction_id)
     const txRes = await client.query(
-      `SELECT id, seq_no, status, session_id, connector_id FROM ocpp_transactions
+      `SELECT id, seq_no, status, session_id, connector_id, meter_start_wh, meter_stop_wh, total_energy_kwh FROM ocpp_transactions
        WHERE ocpp_charge_point_id = $1 AND transaction_id = $2
        FOR UPDATE`,
       [ocppChargePointUUID, transactionId]
@@ -542,23 +633,47 @@ async function handleEndedEvent({
       return {};
     }
 
-    // 1. Update ocpp_transactions to completed
-    await client.query(
-      `UPDATE ocpp_transactions
-       SET seq_no = $1,
-           stopped_reason = $2,
-           charging_state = COALESCE($3, charging_state),
-           ended_at = $4,
-           status = 'completed',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5`,
-      [seqNo, stoppedReason || 'Other', chargingState, parsedTimestamp, currentTx.id]
-    );
+    // Extract final energy reading if present (Phase 3D.6B)
+    const finalMeterWh = parseMeterReadingWh(meterValue);
+    let finalKwh = parseFloat(currentTx.total_energy_kwh) || 0;
+
+    if (finalMeterWh !== null) {
+      const startWh = currentTx.meter_start_wh !== null ? parseFloat(currentTx.meter_start_wh) : 0;
+      const consumedWh = Math.max(0, finalMeterWh - startWh);
+      const computedKwh = consumedWh / 1000.0;
+      finalKwh = Math.max(finalKwh, computedKwh);
+
+      await client.query(
+        `UPDATE ocpp_transactions
+         SET seq_no = $1,
+             stopped_reason = $2,
+             charging_state = COALESCE($3, charging_state),
+             meter_stop_wh = $4,
+             total_energy_kwh = GREATEST(total_energy_kwh, $5),
+             ended_at = $6,
+             status = 'completed',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $7`,
+        [seqNo, stoppedReason || 'Other', chargingState, finalMeterWh, computedKwh, parsedTimestamp, currentTx.id]
+      );
+    } else {
+      await client.query(
+        `UPDATE ocpp_transactions
+         SET seq_no = $1,
+             stopped_reason = $2,
+             charging_state = COALESCE($3, charging_state),
+             ended_at = $4,
+             status = 'completed',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [seqNo, stoppedReason || 'Other', chargingState, parsedTimestamp, currentTx.id]
+      );
+    }
 
     // 2. If a linked VahanGrid session exists, finalize it without resurrecting stopped sessions
     if (currentTx.session_id) {
       const sessRes = await client.query(
-        `SELECT id, status, started_at FROM charging_sessions
+        `SELECT id, status, started_at, energy_kwh FROM charging_sessions
          WHERE id = $1
          FOR UPDATE`,
         [currentTx.session_id]
@@ -573,12 +688,13 @@ async function handleEndedEvent({
              SET status = 'completed',
                  ended_at = $1,
                  duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM ($1 - started_at))::integer),
+                 energy_kwh = GREATEST(energy_kwh, $2),
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $2`,
-            [parsedTimestamp, session.id]
+             WHERE id = $3`,
+            [parsedTimestamp, finalKwh, session.id]
           );
           console.log(
-            `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" marked "completed"`
+            `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" marked "completed" with energy ${finalKwh} kWh`
           );
         } else {
           console.log(
@@ -618,7 +734,7 @@ async function handleEndedEvent({
     await client.query('COMMIT');
 
     console.log(
-      `[OCPP] [${chargePointId}] TransactionEvent(Ended) processed — tx: "${transactionId}", status: completed, reason: "${stoppedReason || 'Other'}"`
+      `[OCPP] [${chargePointId}] TransactionEvent(Ended) processed — tx: "${transactionId}", status: completed, reason: "${stoppedReason || 'Other'}", finalEnergy: ${finalKwh} kWh`
     );
 
     return {};

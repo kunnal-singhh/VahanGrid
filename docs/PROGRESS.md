@@ -22,10 +22,47 @@
 | **Phase 3D.4B**| Persistent OCPP Device & EVSE/Connector Mapping Layer       | ✅ Complete | `test_phase3d4b.js` (82/82 passed) |
 | **Phase 3D.5** | Persistent Device State, Heartbeat & Live Status Sync       | ✅ Complete | `test_phase3d5.js` (79/79 passed)  |
 | **Phase 3D.6A**| Persistent OCPP Transaction Layer & TransactionEvent Lifecycle | ✅ Complete | `test_phase3d6a.js` (76/76 passed) |
+| **Phase 3D.6B**| OCPP TransactionEvent Energy Synchronization                | ✅ Complete | `test_phase3d6b.js` (56/56 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.6B — OCPP TransactionEvent Energy Synchronization
+- **Status:** Completed
+- **Date:** September 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d6b.js` (56/56 tests passing)
+- **Regression Suite:** `test_phase3d6a.js` (76/76 passed), `test_phase3d5.js` (79/79 passed), `test_phase3d4b.js` (82/82 passed), `test_phase3d4a.js` (62/62 passed), `test_phase3d3.js` (55/55 passed), `test_phase3d2.js` (47/47 passed), `test_phase3b3.js` (34/34 passed)
+- **Compliance Notice:** *"VahanGrid safely parses OCPP 2.0.1 TransactionEvent energy telemetry (Energy.Active.Import.Register), distinguishes cumulative meter registers from net session consumption, and synchronizes active customer charging_sessions without data corruption."*
+
+#### Architectural Design & Implementation:
+1. **Migration 016 (`016_ocpp_energy_meter_semantics.sql`):**
+   - Corrected `meter_start_wh` column semantics in `ocpp_transactions` by setting `DEFAULT NULL` (previously `DEFAULT 0.000` was ambiguous between real 0 and unknown baseline).
+   - Clean domain separation strictly maintained: no modification to `charging_sessions`, `connectors`, `evses`, `locations`, `cpos`, `users`, or `vehicles`.
+
+2. **Strict Meter Reading Parser (`parseMeterReadingWh`):**
+   - Implemented and exported pure validation utility in `backend/src/ocpp/handlers/transactionEventHandler.js`.
+   - Validates measurand: strictly matches `Energy.Active.Import.Register` (defaults to it when omitted per OCPP 2.0.1 specification; ignores unrelated measurands such as `Power.Active.Import`, `Current.Import`, `SoC`, `Voltage`).
+   - Validates unit: accepts `Wh`, `kWh` (converted via `val * 1000.0`), and case-insensitive / punctuation variations (`w.h`, `kw.h`, `w·h`). Safely ignores unsupported units (`W`, `A`, `V`, `Percent`, `Celsius`, `kvarh`).
+   - Validates numbers: ensures finite, non-negative numeric values; rejects negative numbers, `NaN`, non-numeric strings.
+   - Validates timestamps: verifies valid ISO 8601 formatting.
+
+3. **Cumulative Register vs. Net Energy Distinction:**
+   - **Started:** Captures baseline meter reading into `ocpp_transactions.meter_start_wh` if present (or `NULL` if omitted).
+   - **Updated:** Captures current reading into `ocpp_transactions.meter_stop_wh`, calculates net consumed energy `delta_wh = max(0, meter_stop_wh - coalesce(meter_start_wh, 0))`, and stores `total_energy_kwh = GREATEST(total_energy_kwh, delta_wh / 1000.0)`.
+   - **Ended:** Captures final reading into `meter_stop_wh`, finalizes `total_energy_kwh`, marks status `'completed'`. If `meterValue` is omitted at Ended, preserves the latest reading and energy from previous Updated events.
+   - **Monotonic Protection:** Uses `GREATEST(total_energy_kwh, $val)` to guarantee energy values never regress backwards on out-of-order or duplicate deliveries.
+
+4. **Domain Synchronization (`charging_sessions.energy_kwh`):**
+   - On `Updated`: If `ocpp_transactions.session_id` links to an active VahanGrid session (`status = 'active'`), synchronizes `charging_sessions.energy_kwh = GREATEST(energy_kwh, calculatedKwh)` in real time.
+   - On `Ended`: Finalizes `charging_sessions.energy_kwh` alongside `ended_at` and `duration_seconds` for active/pending sessions.
+   - **Terminal Protection:** Never modifies or resurrects sessions already in terminal states (`stopped`, `cancelled`).
+
+#### Explicit Current Limitations:
+- Standalone `MeterValues` periodic telemetry subsystem outside of TransactionEvent is scheduled for subsequent phases.
+- Tariffs, pricing calculations, billing, and wallet deductions are not yet triggered by OCPP energy synchronization.
+
+---
 
 ### Phase 3D.6A — Persistent OCPP Transaction Layer & TransactionEvent Lifecycle
 - **Status:** Completed
