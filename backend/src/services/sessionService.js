@@ -20,6 +20,12 @@
  */
 
 import pool, { query } from '../config/database.js';
+import connectionRegistry from '../ocpp/connectionRegistry.js';
+import ocppCallManager from '../ocpp/ocppCallManager.js';
+import {
+  resolveOcppIdentityByConnector,
+  resolveOcppIdentityBySession,
+} from './ocppMappingService.js';
 
 // ---------------------------------------------------------------------------
 // SELECT fragments
@@ -196,7 +202,10 @@ export async function getConnectorHierarchy(connectorId) {
  * @param {string} vehicleId    UUID of the vehicle (ownership already checked)
  * @returns {Promise<object>} Created session with nested station/vehicle info
  */
-export async function startSession(userId, connectorId, vehicleId) {
+export async function startSession(userId, connectorId, vehicleId, options = {}) {
+  if (options && options.remote === true) {
+    return await remoteStartSession(userId, connectorId, vehicleId, options);
+  }
   const client = await pool.connect();
   try {
     // SERIALIZABLE prevents phantom reads; FOR UPDATE prevents concurrent writes
@@ -357,7 +366,10 @@ export async function getSessionById(sessionId, userId) {
  * @returns {Promise<object>} Updated rich session
  * @throws if session not found, not owned, or already stopped
  */
-export async function stopSession(sessionId, userId) {
+export async function stopSession(sessionId, userId, options = {}) {
+  if (options && options.remote === true) {
+    return await remoteStopSession(sessionId, userId, options);
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -452,5 +464,257 @@ export async function getSessionTelemetry(sessionId, userId) {
   );
 
   return res.rows;
+}
+
+/**
+ * Initiates an OCPP 2.0.1 RequestStartTransaction remote start sequence (Phase 3D.8B).
+ *
+ * @param {string} userId
+ * @param {string} connectorId
+ * @param {string} vehicleId
+ * @param {object} [options={}]
+ * @returns {Promise<object>} Created rich session with remote_start metadata
+ */
+export async function remoteStartSession(userId, connectorId, vehicleId, options = {}) {
+  // 1. Reverse lookup: Is this connector managed by an OCPP charge point?
+  const ocppInfo = await resolveOcppIdentityByConnector(connectorId);
+  if (!ocppInfo) {
+    const err = new Error('Connector is not managed by an OCPP charging station (cannot perform remote start).');
+    err.statusCode = 400;
+    err.code = 'NOT_OCPP_CONNECTOR';
+    throw err;
+  }
+
+  // 2. Check charge point online status
+  const ws = connectionRegistry.get(ocppInfo.charge_point_id);
+  if (!ws || ws.readyState !== 1) {
+    const err = new Error(`Charging station "${ocppInfo.charge_point_id}" is currently offline.`);
+    err.statusCode = 503;
+    err.code = 'STATION_OFFLINE';
+    throw err;
+  }
+
+  // 3. Database transaction: allocate pending session and reserve connector
+  const client = await pool.connect();
+  let newSessionId;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+
+    const lockResult = await client.query(
+      `SELECT id, status FROM connectors WHERE id = $1 FOR UPDATE`,
+      [connectorId]
+    );
+
+    if (lockResult.rows.length === 0) {
+      const err = new Error('Connector not found.');
+      err.statusCode = 404;
+      err.code = 'CONNECTOR_NOT_FOUND';
+      throw err;
+    }
+
+    const connector = lockResult.rows[0];
+    if (connector.status !== 'available') {
+      const err = new Error(`Connector is not available (current status: ${connector.status}).`);
+      err.statusCode = 409;
+      err.code = 'CONNECTOR_UNAVAILABLE';
+      throw err;
+    }
+
+    const userActiveResult = await client.query(
+      `SELECT id FROM charging_sessions
+       WHERE user_id = $1 AND status IN ('active', 'pending')
+       LIMIT 1`,
+      [userId]
+    );
+    if (userActiveResult.rows.length > 0) {
+      const err = new Error('You already have an active or pending charging session.');
+      err.statusCode = 409;
+      err.code = 'SESSION_ALREADY_ACTIVE';
+      throw err;
+    }
+
+    const connectorActiveResult = await client.query(
+      `SELECT id FROM charging_sessions
+       WHERE connector_id = $1 AND status IN ('active', 'pending')
+       LIMIT 1`,
+      [connectorId]
+    );
+    if (connectorActiveResult.rows.length > 0) {
+      const err = new Error('This connector is already in use by another session.');
+      err.statusCode = 409;
+      err.code = 'CONNECTOR_IN_USE';
+      throw err;
+    }
+
+    // Insert session in 'pending' state
+    const insertResult = await client.query(
+      `INSERT INTO charging_sessions
+         (user_id, vehicle_id, connector_id, status)
+       VALUES ($1, $2, $3, 'pending')
+       RETURNING id`,
+      [userId, vehicleId, connectorId]
+    );
+    newSessionId = insertResult.rows[0].id;
+
+    // Mark connector 'reserved'
+    await client.query(
+      `UPDATE connectors SET status = 'reserved', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [connectorId]
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '40001' || err.code === '40P01') {
+      const conflictErr = new Error('Could not start session due to concurrent conflicting request.');
+      conflictErr.statusCode = 409;
+      conflictErr.code = 'CONCURRENCY_CONFLICT';
+      throw conflictErr;
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // 4. Allocate remoteStartId and dispatch RequestStartTransaction via ocppCallManager
+  const remoteStartId = Math.floor(Math.random() * 2147483640) + 1;
+  const timeoutMs = options.timeoutMs || 10000;
+
+  try {
+    const startResult = await ocppCallManager.sendCall(
+      ocppInfo.charge_point_id,
+      'RequestStartTransaction',
+      {
+        remoteStartId,
+        idToken: {
+          idToken: userId,
+          type: 'Central',
+        },
+        evseId: ocppInfo.ocpp_evse_id,
+      },
+      { timeoutMs }
+    );
+
+    if (startResult && startResult.status === 'Accepted') {
+      const richSession = await getSessionById(newSessionId, userId);
+      return {
+        ...richSession,
+        remote_start: {
+          remoteStartId,
+          status: 'Accepted',
+        },
+      };
+    } else {
+      // Station rejected: rollback session and release connector
+      await query(
+        `UPDATE charging_sessions SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [newSessionId]
+      );
+      await query(
+        `UPDATE connectors SET status = 'available', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [connectorId]
+      );
+
+      const rejErr = new Error(
+        `Charging station rejected remote start request: ${startResult?.statusInfo?.reasonCode || 'Rejected'}`
+      );
+      rejErr.statusCode = 409;
+      rejErr.code = 'REMOTE_START_REJECTED';
+      throw rejErr;
+    }
+  } catch (err) {
+    // If call failed or timed out: ensure pending session is cancelled and connector is freed
+    await query(
+      `UPDATE charging_sessions SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [newSessionId]
+    ).catch(() => {});
+    await query(
+      `UPDATE connectors SET status = 'available', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [connectorId]
+    ).catch(() => {});
+    throw err;
+  }
+}
+
+/**
+ * Initiates an OCPP 2.0.1 RequestStopTransaction remote stop sequence (Phase 3D.8B).
+ *
+ * @param {string} sessionId
+ * @param {string} userId
+ * @param {object} [options={}]
+ * @returns {Promise<object>} Updated rich session
+ */
+export async function remoteStopSession(sessionId, userId, options = {}) {
+  // 1. Verify session exists and belongs to user
+  const sessRes = await query(
+    `SELECT id, user_id, connector_id, status, external_session_id
+     FROM charging_sessions
+     WHERE id = $1 AND user_id = $2`,
+    [sessionId, userId]
+  );
+
+  if (sessRes.rows.length === 0) {
+    const err = new Error('Session not found.');
+    err.statusCode = 404;
+    err.code = 'SESSION_NOT_FOUND';
+    throw err;
+  }
+
+  const session = sessRes.rows[0];
+  if (session.status !== 'active' && session.status !== 'pending') {
+    const err = new Error(`Session is already in a terminal state (status: ${session.status}).`);
+    err.statusCode = 409;
+    err.code = 'SESSION_ALREADY_STOPPED';
+    throw err;
+  }
+
+  // 2. Resolve OCPP identity
+  const ocppSessionInfo = await resolveOcppIdentityBySession(sessionId);
+
+  // If this session is not linked to an OCPP charger, stop directly
+  if (!ocppSessionInfo || !ocppSessionInfo.charge_point_id) {
+    return await stopSession(sessionId, userId);
+  }
+
+  const transactionId = ocppSessionInfo.transaction_id || session.external_session_id;
+
+  // If no transactionId has been allocated yet (e.g. pending session before plug-in):
+  if (!transactionId) {
+    return await stopSession(sessionId, userId);
+  }
+
+  // 3. Check if charge point is online
+  const isOnline = connectionRegistry.has(ocppSessionInfo.charge_point_id);
+  if (!isOnline) {
+    // Fail-safe: stop directly in database so user is not stuck
+    return await stopSession(sessionId, userId);
+  }
+
+  // 4. Dispatch RequestStopTransaction via ocppCallManager
+  const timeoutMs = options.timeoutMs || 10000;
+  try {
+    const stopResult = await ocppCallManager.sendCall(
+      ocppSessionInfo.charge_point_id,
+      'RequestStopTransaction',
+      { transactionId },
+      { timeoutMs }
+    );
+
+    if (stopResult && stopResult.status === 'Accepted') {
+      return await stopSession(sessionId, userId);
+    } else {
+      const rejErr = new Error(
+        `Charging station rejected remote stop request: ${stopResult?.statusInfo?.reasonCode || 'Rejected'}`
+      );
+      rejErr.statusCode = 409;
+      rejErr.code = 'REMOTE_STOP_REJECTED';
+      throw rejErr;
+    }
+  } catch (err) {
+    if (options.failSafe) {
+      return await stopSession(sessionId, userId);
+    }
+    throw err;
+  }
 }
 

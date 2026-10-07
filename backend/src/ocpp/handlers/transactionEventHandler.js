@@ -391,11 +391,11 @@ async function handleStartedEvent({
       return {};
     }
 
-    // 3. Check if an active VahanGrid session exists for this connector
+    // 3. Check if an active or pending VahanGrid session exists for this connector
     let linkedSessionId = null;
     const activeSessionRes = await client.query(
-      `SELECT id, user_id FROM charging_sessions
-       WHERE connector_id = $1 AND status = 'active'
+      `SELECT id, user_id, status FROM charging_sessions
+       WHERE connector_id = $1 AND status IN ('active', 'pending')
        ORDER BY started_at DESC
        LIMIT 1
        FOR UPDATE`,
@@ -404,20 +404,29 @@ async function handleStartedEvent({
 
     if (activeSessionRes.rows.length > 0) {
       linkedSessionId = activeSessionRes.rows[0].id;
-      // Link external_session_id on the existing charging_sessions row
+      // Link external_session_id and ensure session is transitioned to 'active'
       await client.query(
         `UPDATE charging_sessions
          SET external_session_id = $1,
+             status = 'active',
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [transactionId, linkedSessionId]
       );
+      // Ensure physical connector is set to 'charging'
+      await client.query(
+        `UPDATE connectors
+         SET status = 'charging',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [physicalConnectorUUID]
+      );
       console.log(
-        `[OCPP] [${chargePointId}] Linked OCPP transaction "${transactionId}" to existing VahanGrid session "${linkedSessionId}"`
+        `[OCPP] [${chargePointId}] Linked OCPP transaction "${transactionId}" to existing VahanGrid session "${linkedSessionId}" (status: active)`
       );
     } else {
       console.log(
-        `[OCPP] [${chargePointId}] No active VahanGrid session found for connector "${physicalConnectorUUID}". Preserving session_id = NULL.`
+        `[OCPP] [${chargePointId}] No active or pending VahanGrid session found for connector "${physicalConnectorUUID}". Preserving session_id = NULL.`
       );
     }
 
@@ -695,6 +704,18 @@ async function handleEndedEvent({
           );
           console.log(
             `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" marked "completed" with energy ${finalKwh} kWh`
+          );
+        } else if (session.status === 'stopped') {
+          // If session was already stopped via REST, preserve terminal status "stopped" but synchronize final energy
+          await client.query(
+            `UPDATE charging_sessions
+             SET energy_kwh = GREATEST(energy_kwh, $1),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [finalKwh, session.id]
+          );
+          console.log(
+            `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" preserved terminal "stopped" status; energy finalized to ${finalKwh} kWh`
           );
         } else {
           console.log(

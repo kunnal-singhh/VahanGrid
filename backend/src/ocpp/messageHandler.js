@@ -23,6 +23,8 @@ import { handleHeartbeat } from './handlers/heartbeatHandler.js';
 import { handleTransactionEvent } from './handlers/transactionEventHandler.js';
 import { handleMeterValues } from './handlers/meterValuesHandler.js';
 
+import ocppCallManager from './ocppCallManager.js';
+
 // OCPP 2.0.1 Message Type Identifiers
 export const MESSAGE_TYPE_CALL = 2;
 export const MESSAGE_TYPE_CALLRESULT = 3;
@@ -116,14 +118,50 @@ export async function handleOcppMessage(rawMessage, chargePointId, ws) {
     return;
   }
 
+  // ── 4a. Handle incoming CALLRESULT (type 3) frames ────────────────────────
+  if (messageTypeId === MESSAGE_TYPE_CALLRESULT) {
+    if (typeof messageId !== 'string' || messageId.trim().length === 0) {
+      sendCallError(ws, '', ERROR_CODES.RPC_FRAMEWORK_ERROR, 'MessageId must be a non-empty string in CALLRESULT');
+      return;
+    }
+    // CALLRESULT frame format: [3, "<MessageId>", {<Payload>}]
+    const callResultPayload = parsed[2] !== undefined && parsed[2] !== null ? parsed[2] : {};
+    const handled = ocppCallManager.handleCallResult(messageId, callResultPayload);
+    if (!handled) {
+      console.warn(
+        `[OCPP] [${chargePointId}] Received unprompted, expired, or duplicate CALLRESULT for messageId "${messageId}"`
+      );
+    }
+    return;
+  }
+
+  // ── 4b. Handle incoming CALLERROR (type 4) frames ─────────────────────────
+  if (messageTypeId === MESSAGE_TYPE_CALLERROR) {
+    if (typeof messageId !== 'string' || messageId.trim().length === 0) {
+      sendCallError(ws, '', ERROR_CODES.RPC_FRAMEWORK_ERROR, 'MessageId must be a non-empty string in CALLERROR');
+      return;
+    }
+    // CALLERROR frame format: [4, "<MessageId>", "<ErrorCode>", "<ErrorDescription>", {<ErrorDetails>}]
+    const errorCode = typeof parsed[2] === 'string' ? parsed[2] : ERROR_CODES.INTERNAL_ERROR;
+    const errorDescription = typeof parsed[3] === 'string' ? parsed[3] : '';
+    const errorDetails = parsed[4] && typeof parsed[4] === 'object' ? parsed[4] : {};
+    const handled = ocppCallManager.handleCallError(messageId, errorCode, errorDescription, errorDetails);
+    if (!handled) {
+      console.warn(
+        `[OCPP] [${chargePointId}] Received unprompted, expired, or duplicate CALLERROR for messageId "${messageId}"`
+      );
+    }
+    return;
+  }
+
+  // ── 4c. Reject any unsupported MessageTypeId other than CALL (2) ──────────
   if (messageTypeId !== MESSAGE_TYPE_CALL) {
-    // Only CALL (type 2) messages are processed as requests by CSMS
     const fallbackId = typeof messageId === 'string' ? messageId : '';
     sendCallError(
       ws,
       fallbackId,
       ERROR_CODES.MESSAGE_TYPE_NOT_SUPPORTED,
-      `Unsupported MessageTypeId ${messageTypeId}; only CALL (2) is accepted by CSMS in this phase`
+      `Unsupported MessageTypeId ${messageTypeId}; expected CALL (2), CALLRESULT (3), or CALLERROR (4)`
     );
     return;
   }

@@ -24,10 +24,61 @@
 | **Phase 3D.6A**| Persistent OCPP Transaction Layer & TransactionEvent Lifecycle | ✅ Complete | `test_phase3d6a.js` (76/76 passed) |
 | **Phase 3D.6B**| OCPP TransactionEvent Energy Synchronization                | ✅ Complete | `test_phase3d6b.js` (56/56 passed) |
 | **Phase 3D.7B**| OCPP MeterValues Telemetry & Dual-Tier Storage             | ✅ Complete | `test_phase3d7b.js` (72/72 passed) |
+| **Phase 3D.8B**| OCPP Remote Start/Stop Command Infrastructure               | ✅ Complete | `test_phase3d8b.js` (51/51 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.8B — OCPP Remote Start/Stop Command Infrastructure
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d8b.js` (51/51 tests passing)
+- **Regression Suite:** `test_phase3d7b.js` (72/72 passed), `test_phase3d6b.js` (56/56 passed), `test_phase3d6a.js` (76/76 passed), `test_phase3d5.js` (79/79 passed), `test_phase3d4b.js` (82/82 passed), `test_phase3d4a.js` (62/62 passed), `test_phase3d3.js` (55/55 passed), `test_phase3d2.js` (47/47 passed)
+- **Compliance Notice:** *"VahanGrid implements outbound OCPP 2.0.1 CALL infrastructure with in-memory correlation for CALLRESULT / CALLERROR frames, robust timeout handling, socket-drop cleanup, reverse identity mappings, and end-to-end REST session integration for RequestStartTransaction and RequestStopTransaction."*
+
+#### Architectural Design & Implementation:
+1. **Outbound OCPP CALL Manager (`OcppCallManager`):**
+   - Implemented in `backend/src/ocpp/ocppCallManager.js` as an exportable singleton and extensible class.
+   - Generates unique UUID-based message identifiers (`urn:uuid:<uuid>`).
+   - Formats standard OCPP 2.0.1 CALL frames: `[2, messageId, action, payload]`.
+   - Dispatches frames to active charge point WebSockets retrieved from `connectionRegistry`.
+   - Maintains in-flight calls in memory (`pendingCalls` Map) with configured timeouts (default 10,000ms).
+   - Enforces timeout cancellation rejecting with `504 Gateway Timeout` (`STATION_TIMEOUT`).
+   - Listens to connection close events in `ocppServer.js`, aborting all in-flight calls with `503 Service Unavailable` (`CONNECTION_CLOSED`).
+
+2. **Incoming Correlation Handler (`messageHandler.js`):**
+   - Parses message type ID:
+     - `3` (CALLRESULT `[3, messageId, payload]`): resolves pending call Promise.
+     - `4` (CALLERROR `[4, messageId, errorCode, errorDescription, errorDetails]`): rejects pending call Promise with structured `OcppError` (`502 Bad Gateway`).
+   - Automatically unregisters completed/failed calls from `pendingCalls`.
+
+3. **Reverse OCPP Identity Mappings (`ocppMappingService.js`):**
+   - `resolveOcppIdentityByConnector(connectorId)`: Resolves VahanGrid connector UUID to `{ charge_point_id, ocpp_evse_id, ocpp_connector_id, evse_id }`.
+   - `resolveOcppIdentityBySession(sessionId)`: Resolves VahanGrid session UUID to `{ charge_point_id, transaction_id, connector_id }`.
+
+4. **Remote Start Transaction Flow (`RequestStartTransaction`):**
+   - Available via `POST /api/v1/sessions/start` with `{ remote: true }` and dedicated `POST /api/v1/sessions/remote-start`.
+   - Checks station online status (returns `503 STATION_OFFLINE` if disconnected).
+   - Generates a remote start ID (`1..2147483647`) and sends `RequestStartTransaction` CALL frame:
+     `{ remoteStartId, evseId, idToken: { idToken: userId, type: 'Central' } }`.
+   - If station returns `RequestStartTransactionResponse` with status `Accepted`:
+     - Creates `charging_sessions` in status `'pending'` (awaiting vehicle plug-in).
+     - Reserves connector (`status = 'reserved'`).
+   - If station rejects (`Rejected`): returns `409 Conflict` (`REMOTE_START_REJECTED`) and frees connector back to `'available'`.
+   - When vehicle plugs in and station fires `TransactionEvent(Started)`:
+     - Links to pending session, transitions `charging_sessions` to `'active'`, and connector to `'charging'`.
+
+5. **Remote Stop Transaction Flow (`RequestStopTransaction`):**
+   - Available via `POST /api/v1/sessions/:id/stop` with `{ remote: true }` and dedicated `POST /api/v1/sessions/:id/remote-stop`.
+   - Resolves active `transactionId` and dispatches `RequestStopTransaction` CALL frame: `{ transactionId }`.
+   - If accepted, updates session to `'stopped'`.
+   - Upon receipt of subsequent `TransactionEvent(Ended)` from station, terminal status `'stopped'` is strictly preserved while final energy is synchronized from the meter reading.
+
+6. **Backward Compatibility & Non-Remote REST Sessions:**
+   - Standard calls to `POST /api/v1/sessions/start` without `{ remote: true }` continue to create immediate `'active'` sessions.
+   - Standard calls to `POST /api/v1/sessions/:id/stop` continue to perform immediate local session termination.
+   - 100% test pass rate preserved across all regression test suites (510 total automated tests).
 
 ### Phase 3D.7B — OCPP MeterValues Telemetry & Dual-Tier Storage
 - **Status:** Completed

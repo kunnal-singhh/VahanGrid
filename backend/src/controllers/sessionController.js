@@ -107,8 +107,11 @@ export async function startSessionHandler(req, res, next) {
       });
     }
 
-    // 5. Start session (atomic with row locks)
-    const session = await sessionService.startSession(req.user.id, connector_id, vehicle_id);
+    // 5. Start session (atomic with row locks; dispatches RequestStartTransaction if remote is requested)
+    const isRemote = req.body?.remote === true || req.body?.remote_start === true || req.path?.includes('remote-start');
+    const session = await sessionService.startSession(req.user.id, connector_id, vehicle_id, {
+      remote: isRemote,
+    });
     return res.status(201).json({
       success: true,
       data: session,
@@ -223,7 +226,10 @@ export async function stopSessionHandler(req, res, next) {
       });
     }
 
-    const session = await sessionService.stopSession(id, req.user.id);
+    const isRemote = req.body?.remote === true || req.body?.remote_stop === true || req.path?.includes('remote-stop');
+    const session = await sessionService.stopSession(id, req.user.id, {
+      remote: isRemote,
+    });
     return res.status(200).json({
       success: true,
       data: session,
@@ -240,6 +246,26 @@ export async function stopSessionHandler(req, res, next) {
     }
     next(err);
   }
+}
+
+/**
+ * POST /api/v1/sessions/remote-start
+ *
+ * Explicit endpoint for starting a remote OCPP session.
+ */
+export async function remoteStartSessionHandler(req, res, next) {
+  req.body = { ...(req.body || {}), remote: true };
+  return startSessionHandler(req, res, next);
+}
+
+/**
+ * POST /api/v1/sessions/:id/remote-stop
+ *
+ * Explicit endpoint for stopping a remote OCPP session.
+ */
+export async function remoteStopSessionHandler(req, res, next) {
+  req.body = { ...(req.body || {}), remote: true };
+  return stopSessionHandler(req, res, next);
 }
 
 /**

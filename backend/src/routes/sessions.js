@@ -16,11 +16,13 @@
 import { Router } from 'express';
 import {
   startSessionHandler,
+  remoteStartSessionHandler,
   getActiveSessionHandler,
   listSessionsHandler,
   getSessionHandler,
   getSessionTelemetryHandler,
   stopSessionHandler,
+  remoteStopSessionHandler,
 } from '../controllers/sessionController.js';
 import { authenticate } from '../middleware/authenticate.js';
 
@@ -31,10 +33,12 @@ router.use(authenticate);
 
 // Lifecycle routes (static routes must be defined before parameterized :id)
 router.post('/start',          startSessionHandler);
+router.post('/remote-start',   remoteStartSessionHandler);
 router.get('/active',          getActiveSessionHandler);
 router.get('/',                listSessionsHandler);
 router.get('/:id/telemetry',   getSessionTelemetryHandler);
 router.get('/:id',             getSessionHandler);
 router.post('/:id/stop',       stopSessionHandler);
+router.post('/:id/remote-stop', remoteStopSessionHandler);
 
 export default router;

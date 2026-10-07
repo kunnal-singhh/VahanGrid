@@ -15,6 +15,7 @@
 
 import { WebSocketServer } from 'ws';
 import connectionRegistry from './connectionRegistry.js';
+import ocppCallManager from './ocppCallManager.js';
 import { handleOcppMessage } from './messageHandler.js';
 
 let wssInstance = null;
@@ -156,6 +157,9 @@ export function initOcppServer(httpServer, options = {}) {
     ws.on('close', (code, reason) => {
       const reasonStr = reason ? reason.toString() : 'none';
       console.log(`[OCPP] Charge Point disconnected: "${cpId}" (code: ${code}, reason: ${reasonStr})`);
+
+      // Abort any in-flight outbound calls for this charger
+      ocppCallManager.abortPendingForChargePoint(cpId, reasonStr);
 
       // Guarded removal: only removes if the registered connection is this exact socket
       connectionRegistry.remove(cpId, ws);

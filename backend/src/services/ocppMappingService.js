@@ -168,3 +168,122 @@ export async function getFullMapping(chargePointId) {
   );
   return result.rows;
 }
+
+// ---------------------------------------------------------------------------
+// Reverse Lookups (VahanGrid Entity -> OCPP Identity) - Phase 3D.8B
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves a VahanGrid connector UUID to its underlying OCPP charge point, EVSE, and connector identity.
+ * Returns null if the connector is not mapped to an OCPP charge point.
+ *
+ * @param {string} connectorId - VahanGrid connector UUID
+ * @returns {Promise<{
+ *   ocpp_charge_point_uuid: string,
+ *   charge_point_id: string,
+ *   cp_status: string,
+ *   registration_status: string,
+ *   ocpp_evse_id: number,
+ *   evse_id: string,
+ *   ocpp_connector_id: number,
+ *   connector_id: string
+ * }|null>}
+ */
+export async function resolveOcppIdentityByConnector(connectorId) {
+  if (!connectorId || typeof connectorId !== 'string') return null;
+
+  const result = await query(
+    `SELECT
+       ocp.id AS ocpp_charge_point_uuid,
+       ocp.charge_point_id,
+       ocp.status AS cp_status,
+       ocp.registration_status,
+       oem.ocpp_evse_id,
+       oem.evse_id,
+       ocm.ocpp_connector_id,
+       ocm.connector_id
+     FROM connectors cn
+     JOIN ocpp_connector_mappings ocm ON ocm.connector_id = cn.id
+     JOIN ocpp_evse_mappings      oem ON ocm.ocpp_evse_mapping_id = oem.id
+     JOIN ocpp_charge_points      ocp ON oem.charge_point_id = ocp.id
+     WHERE cn.id = $1`,
+    [connectorId]
+  );
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+}
+
+/**
+ * Resolves a VahanGrid charging session UUID to its associated OCPP transaction and charge point.
+ *
+ * @param {string} sessionId - VahanGrid session UUID
+ * @returns {Promise<{
+ *   session_id: string,
+ *   charge_point_id: string,
+ *   ocpp_charge_point_uuid: string,
+ *   transaction_id: string|null,
+ *   ocpp_transaction_uuid?: string,
+ *   ocpp_evse_id?: number,
+ *   ocpp_connector_id?: number,
+ *   connector_id?: string,
+ *   session_status: string
+ * }|null>}
+ */
+export async function resolveOcppIdentityBySession(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string') return null;
+
+  // 1. Try to find via active or linked ocpp_transactions first
+  const txRes = await query(
+    `SELECT
+       ot.id AS ocpp_transaction_uuid,
+       ot.transaction_id,
+       ot.status AS ocpp_tx_status,
+       ot.ocpp_evse_id,
+       ot.ocpp_connector_id,
+       ot.connector_id,
+       ocp.id AS ocpp_charge_point_uuid,
+       ocp.charge_point_id,
+       cs.id AS session_id,
+       cs.user_id,
+       cs.status AS session_status
+     FROM charging_sessions cs
+     JOIN ocpp_transactions ot ON ot.session_id = cs.id
+     JOIN ocpp_charge_points ocp ON ot.ocpp_charge_point_id = ocp.id
+     WHERE cs.id = $1
+     ORDER BY ot.started_at DESC
+     LIMIT 1`,
+    [sessionId]
+  );
+
+  if (txRes.rows.length > 0) {
+    return txRes.rows[0];
+  }
+
+  // 2. Fallback: Lookup by session's connector mapping chain
+  const sessRes = await query(
+    `SELECT
+       cs.id AS session_id,
+       cs.user_id,
+       cs.status AS session_status,
+       cs.external_session_id AS transaction_id,
+       ocp.id AS ocpp_charge_point_uuid,
+       ocp.charge_point_id,
+       oem.ocpp_evse_id,
+       ocm.ocpp_connector_id,
+       cn.id AS connector_id
+     FROM charging_sessions cs
+     JOIN connectors cn ON cs.connector_id = cn.id
+     JOIN ocpp_connector_mappings ocm ON ocm.connector_id = cn.id
+     JOIN ocpp_evse_mappings oem ON ocm.ocpp_evse_mapping_id = oem.id
+     JOIN ocpp_charge_points ocp ON oem.charge_point_id = ocp.id
+     WHERE cs.id = $1`,
+    [sessionId]
+  );
+
+  if (sessRes.rows.length > 0) {
+    return sessRes.rows[0];
+  }
+
+  return null;
+}
