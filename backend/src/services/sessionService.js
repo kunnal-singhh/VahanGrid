@@ -28,6 +28,7 @@ import {
 } from './ocppMappingService.js';
 import { resolveApplicableTariff } from './tariffService.js';
 import { buildTariffSnapshot, calculatePrice } from './pricingService.js';
+import { finalizeCdr } from './cdrService.js';
 
 // ---------------------------------------------------------------------------
 // SELECT fragments
@@ -465,6 +466,12 @@ export async function stopSession(sessionId, userId, options = {}) {
     );
 
     await client.query('COMMIT');
+
+    // Trigger CDR finalization asynchronously — non-blocking so CDR errors
+    // never break the session stop response returned to the user.
+    finalizeCdr(sessionId).catch((cdrErr) => {
+      console.error(`[CDR] Failed to finalize CDR for session ${sessionId}:`, cdrErr.message);
+    });
 
     // Return the updated session with rich details
     return await getSessionById(sessionId, userId);

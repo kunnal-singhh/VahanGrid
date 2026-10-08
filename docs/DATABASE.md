@@ -172,3 +172,30 @@ The Phase 3A REST API (`/api/v1/stations`, `/api/v1/stations/:id`, `/api/v1/stat
 - **Entity Assembly:** Each `location` record is joined with its parent `cpo`, while its child `evses` and grandchild `connectors` are aggregated into structured JSON arrays in a single, high-performance parameterized query via PostgreSQL's `json_agg()`.
 - **Coordinate Transparency:** The PostGIS `geography` column is unpacked to standard JSON `latitude` and `longitude` numbers for map renderers (Leaflet).
 - **Spatial Acceleration:** The `/api/v1/stations/nearby` endpoint applies `ST_DWithin` and `ST_Distance` on `locations.location` to return proximity-ranked charging hubs without requiring client-side geometric calculations.
+
+---
+
+## 7. Tariffs & Charge Detail Records (CDRs)
+
+### Tariffs Table (`tariffs` - Migration `018_create_tariffs.sql`)
+Supports scoped pricing rules with precedence hierarchy:
+1. `connector_id` (Most specific)
+2. `evse_id`
+3. `location_id`
+4. `cpo_id`
+5. System Default (All FKs NULL)
+
+Columns:
+- `id`: UUID PRIMARY KEY
+- Scoping FKs: `cpo_id`, `location_id`, `evse_id`, `connector_id`
+- Rates: `price_per_kwh`, `session_fee`, `price_per_min`, `idle_fee_per_min` (all `NUMERIC(10,2)`)
+- Rules: `idle_grace_minutes` (INT), `tax_rate` (`NUMERIC(5,4)` e.g. 0.1800)
+- Temporal: `valid_from`, `valid_to`, `is_active`
+
+### Charge Detail Records Table (`cdrs` - Migration `019_create_cdrs.sql`)
+Finalized immutable billing records generated when a session terminates (`completed` or `stopped`).
+- **Idempotency:** Enforced via `CONSTRAINT uq_cdr_session_id UNIQUE (session_id)`.
+- **Integrity:** `session_id`, `user_id`, `connector_id`, `evse_id`, `location_id`, `cpo_id` linked via FKs with `ON DELETE RESTRICT`.
+- **Snapshots:** Copies `cpo_name`, `location_name`, `location_city`, `connector_standard`, `tariff_snapshot` (JSONB), and `pricing_breakdown` (JSONB) so post-facto entity renames or tariff revisions cannot alter settled bills.
+- **Precision:** `energy_kwh NUMERIC(8,3)`, `total_amount NUMERIC(10,2)` (never float).
+

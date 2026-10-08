@@ -890,3 +890,120 @@ Stops an active charging session owned by the authenticated user.
 | `404` | `SESSION_NOT_FOUND` | Session not found or owned by a different user |
 | `409` | `SESSION_ALREADY_STOPPED` | Session is already stopped, completed, or cancelled |
 
+---
+
+### `GET /api/v1/sessions/:id/cdr`
+
+Retrieves the finalized Charge Detail Record (CDR) for a specific session.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Access Control:** Enforces ownership — returns `403 FORBIDDEN` if requested by another user.
+- **Session Lifecycle:** Returns `404 NOT_FOUND` if the session has not reached a terminal billable state (`completed` or `stopped`).
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "c0000001-0000-0000-0000-000000000001",
+    "session_id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+    "user_id": "b0000001-0000-0000-0000-000000000001",
+    "status": "finalized",
+    "session_status": "completed",
+    "energy_kwh": 23.75,
+    "duration_seconds": 3600,
+    "currency": "INR",
+    "energy_cost": 370.0,
+    "session_fee": 10.0,
+    "time_cost": 0.0,
+    "idle_cost": 0.0,
+    "subtotal": 380.0,
+    "tax_rate": 0.18,
+    "tax_amount": 68.4,
+    "total_amount": 448.4,
+    "location_name": "Aerocity Charging Hub",
+    "cpo_name": "Tata Power EZ Charge"
+  }
+}
+```
+
+---
+
+## 7. Tariffs & Pricing
+
+VahanGrid supports hierarchical tariff resolution across:
+`Connector -> EVSE -> Location -> CPO -> System Default`.
+
+### `GET /api/v1/tariffs`
+List all active tariffs. Supports optional filters: `cpo_id`, `location_id`, `evse_id`, `connector_id`, `is_active`.
+
+### `GET /api/v1/tariffs/:id`
+Retrieve a single tariff by ID.
+
+### `POST /api/v1/tariffs`
+Create a new tariff definition.
+
+#### Request Body
+```json
+{
+  "name": "Super Fast DC Peak Tariff",
+  "cpo_id": "a0000001-0000-0000-0000-000000000001",
+  "location_id": null,
+  "price_per_kwh": 18.50,
+  "session_fee": 10.00,
+  "price_per_min": 0.00,
+  "idle_fee_per_min": 1.50,
+  "idle_grace_minutes": 10,
+  "tax_rate": 0.1800,
+  "currency": "INR"
+}
+```
+
+### `PATCH /api/v1/tariffs/:id`
+Update an existing tariff.
+
+### `DELETE /api/v1/tariffs/:id`
+Soft-deletes or hard-deletes unreferenced tariffs.
+
+---
+
+## 8. Charge Detail Records (CDRs)
+
+Charge Detail Records represent immutable, audit-grade financial and energy records generated upon session completion.
+
+### `GET /api/v1/cdrs`
+List all CDRs belonging to the authenticated user.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "c0000001-0000-0000-0000-000000000001",
+      "session_id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+      "user_id": "b0000001-0000-0000-0000-000000000001",
+      "status": "finalized",
+      "session_status": "completed",
+      "energy_kwh": 23.75,
+      "duration_seconds": 3600,
+      "total_amount": 448.4,
+      "currency": "INR",
+      "location_name": "Aerocity Charging Hub",
+      "cpo_name": "Tata Power EZ Charge",
+      "created_at": "2026-10-08T14:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "count": 1
+  }
+}
+```
+
+### `GET /api/v1/cdrs/:id`
+Retrieve full immutable CDR details for the specified CDR UUID.
+
+#### Response `200 OK`
+Returns the full CDR record including immutable snapshots (`tariff_snapshot`, `pricing_breakdown`), physical meters (`meter_start_wh`, `meter_stop_wh`), and station metadata snapshots.
+
+

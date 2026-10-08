@@ -555,3 +555,41 @@
   - `GET /api/v1/wallet/transactions` (ordered `created_at DESC`)
 - **Security:** Authenticated sessions strictly via `req.user.id`; client cannot provide or spoof `wallet_id` or `user_id`.
 - **Test Suite:** `backend/src/scripts/test_phase3c4a.js` (44/44 passed).
+
+---
+
+### Phase 3E.1 — Tariff & Pricing Architecture
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3e1.js` (50/50 tests passing)
+- **Database Migration:** `018_create_tariffs.sql`
+- **Core Components:**
+  - `backend/src/services/pricingService.js`: Deterministic paisa-accurate pricing arithmetic (`roundToPaisa`), energy cost, session fees, per-minute time costs, idle fees with grace period, tax calculation, and immutable `buildTariffSnapshot()`.
+  - `backend/src/services/tariffService.js`: Hierarchical tariff resolution (`Connector -> EVSE -> Location -> CPO -> System Default`), CRUD, validation.
+  - `backend/src/controllers/tariffController.js` & `backend/src/routes/tariffs.js`: REST management endpoints.
+  - Linked `tariff_snapshot` into `charging_sessions` at session start time.
+
+---
+
+### Phase 3E.2 — Charge Detail Record (CDR) Generation
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3e2.js` (67/67 tests passing)
+- **Database Migration:** `019_create_cdrs.sql`
+- **Core Components:**
+  - `backend/src/services/cdrService.js`:
+    - `finalizeCdr(sessionId)`: Generates audit-grade immutable CDR when session transitions to `completed` or `stopped`.
+    - Enforces DB-level uniqueness on `session_id` (`CONSTRAINT uq_cdr_session_id UNIQUE (session_id)`) ensuring strict idempotency.
+    - Captures physical meter readings (`meter_start_wh`, `meter_stop_wh`) and protocol audit trail (`ocpp_transaction_id`).
+    - Snapshots location and CPO names to preserve historic accuracy independent of subsequent entity renames.
+    - Re-uses precomputed `pricing_breakdown` or deterministically computes it from immutable `tariff_snapshot`.
+    - Handles failure cases: non-billable (`failed`, `cancelled`), active sessions, and missing timestamps safely return `null` without throwing unhandled exceptions.
+    - Provides secure read helpers: `getCdrBySessionId(sessionId, userId)`, `getCdrById(cdrId, userId)`, `listCdrsByUser(userId)`.
+  - `backend/src/controllers/cdrController.js` & `backend/src/routes/cdrs.js`:
+    - `GET /api/v1/cdrs`: Authenticated user CDR list.
+    - `GET /api/v1/cdrs/:id`: Single CDR lookup with ownership verification (403 for cross-user access).
+    - `GET /api/v1/sessions/:id/cdr`: Session-scoped CDR endpoint with ownership verification.
+  - **Lifecycle Integration:**
+    - Hooked into `sessionService.stopSession()` post-commit via non-blocking asynchronous dispatch.
+    - Hooked into `transactionEventHandler.handleEndedEvent()` for OCPP 2.0.1 transaction completion, computing pricing breakdowns for OCPP-terminated sessions.
+

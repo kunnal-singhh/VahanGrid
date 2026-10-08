@@ -30,6 +30,8 @@ import {
   resolveConnectorMapping,
   resolveEvseMapping,
 } from '../../services/ocppMappingService.js';
+import { finalizeCdr } from '../../services/cdrService.js';
+import { calculatePrice } from '../../services/pricingService.js';
 
 const VALID_EVENT_TYPES = new Set(['Started', 'Updated', 'Ended']);
 
@@ -682,7 +684,7 @@ async function handleEndedEvent({
     // 2. If a linked VahanGrid session exists, finalize it without resurrecting stopped sessions
     if (currentTx.session_id) {
       const sessRes = await client.query(
-        `SELECT id, status, started_at, energy_kwh FROM charging_sessions
+        `SELECT id, status, started_at, energy_kwh, tariff_snapshot FROM charging_sessions
          WHERE id = $1
          FOR UPDATE`,
         [currentTx.session_id]
@@ -692,18 +694,36 @@ async function handleEndedEvent({
         const session = sessRes.rows[0];
         // Only transition to completed if currently active or pending
         if (session.status === 'active' || session.status === 'pending') {
+          // Compute pricing from tariff_snapshot (fills OCPP-ended pricing gap)
+          let finalCost = 0.00;
+          let pricingBreakdown = null;
+          if (session.tariff_snapshot) {
+            const durationSecs = Math.max(
+              0,
+              Math.round((parsedTimestamp.getTime() - new Date(session.started_at).getTime()) / 1000)
+            );
+            const calc = calculatePrice(session.tariff_snapshot, {
+              energy_kwh: Math.max(Number(session.energy_kwh || 0), finalKwh),
+              duration_seconds: durationSecs,
+              idle_seconds: 0,
+            });
+            finalCost = calc.total_cost;
+            pricingBreakdown = calc;
+          }
           await client.query(
             `UPDATE charging_sessions
              SET status = 'completed',
                  ended_at = $1,
                  duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM ($1 - started_at))::integer),
                  energy_kwh = GREATEST(energy_kwh, $2),
+                 cost_amount = $3,
+                 pricing_breakdown = $4,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $3`,
-            [parsedTimestamp, finalKwh, session.id]
+             WHERE id = $5`,
+            [parsedTimestamp, finalKwh, finalCost, pricingBreakdown ? JSON.stringify(pricingBreakdown) : null, session.id]
           );
           console.log(
-            `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" marked "completed" with energy ${finalKwh} kWh`
+            `[OCPP] [${chargePointId}] Linked VahanGrid session "${session.id}" marked "completed" with energy ${finalKwh} kWh, cost ${finalCost} INR`
           );
         } else if (session.status === 'stopped') {
           // If session was already stopped via REST, preserve terminal status "stopped" but synchronize final energy
@@ -753,6 +773,17 @@ async function handleEndedEvent({
     }
 
     await client.query('COMMIT');
+
+    // Trigger CDR finalization for the linked VahanGrid session (if any).
+    // Non-blocking: CDR errors must not affect the OCPP response.
+    if (currentTx.session_id) {
+      // Ensure pricing_breakdown is computed if session was completed via OCPP
+      // (not via REST stopSession which computes it already).
+      // cdrService.finalizeCdr handles all cases safely.
+      finalizeCdr(currentTx.session_id).catch((cdrErr) => {
+        console.error(`[CDR] Failed to finalize CDR for session ${currentTx.session_id}:`, cdrErr.message);
+      });
+    }
 
     console.log(
       `[OCPP] [${chargePointId}] TransactionEvent(Ended) processed — tx: "${transactionId}", status: completed, reason: "${stoppedReason || 'Other'}", finalEnergy: ${finalKwh} kWh`

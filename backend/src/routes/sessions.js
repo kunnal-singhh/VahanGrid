@@ -24,6 +24,7 @@ import {
   stopSessionHandler,
   remoteStopSessionHandler,
 } from '../controllers/sessionController.js';
+import { getCdrBySessionHandler } from '../controllers/cdrController.js';
 import { authenticate } from '../middleware/authenticate.js';
 
 const router = Router();
@@ -40,5 +41,6 @@ router.get('/:id/telemetry',   getSessionTelemetryHandler);
 router.get('/:id',             getSessionHandler);
 router.post('/:id/stop',       stopSessionHandler);
 router.post('/:id/remote-stop', remoteStopSessionHandler);
+router.get('/:id/cdr',         getCdrBySessionHandler);
 
 export default router;
