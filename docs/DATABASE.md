@@ -232,4 +232,53 @@ Wallet settlement reconciles finalized CDRs against the user's signed ledger wal
    - Insufficient funds strictly reject the debit, create no debt, and record `settlement_status = 'failed'` with `settlement_failure_reason = 'INSUFFICIENT_FUNDS'`.
    - Zero-amount sessions (`total_amount = 0.00`) are marked settled without inserting into `wallet_transactions`, respecting the `amount <> 0.00` check constraint.
 
+---
+
+## 9. Payment Gateway & Wallet Top-up (Phase 3E.4 - Migration `021_create_payments.sql`)
+
+### Separation of Concerns: Payment vs Wallet Transaction
+- **`payments` Table:** Tracks external payment gateway interactions, order intents, checkout completion, and asynchronous gateway webhooks.
+- **`wallet_transactions` Table:** The internal signed ledger of record. An external payment success results in exactly ONE ledger credit entry (`type = 'topup'`).
+- The payment gateway order/record is never directly treated as the wallet ledger.
+
+### Schema Additions:
+1. **`payments` Table:**
+   - `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`
+   - `user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT`
+   - `wallet_id UUID NOT NULL REFERENCES wallets(id) ON DELETE RESTRICT`
+   - `provider VARCHAR(50) NOT NULL DEFAULT 'razorpay'`
+   - `provider_order_id VARCHAR(255) UNIQUE`
+   - `provider_payment_id VARCHAR(255) UNIQUE`
+   - `amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0.00)`
+   - `currency VARCHAR(3) NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3)`
+   - `status VARCHAR(20) NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'pending', 'paid', 'failed', 'cancelled'))`
+   - `wallet_transaction_id UUID REFERENCES wallet_transactions(id) ON DELETE SET NULL`
+   - `error_code VARCHAR(100)`
+   - `error_description TEXT`
+   - `metadata JSONB NOT NULL DEFAULT '{}'::jsonb`
+   - `created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`
+   - `updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`
+   - `completed_at TIMESTAMPTZ`
+
+2. **`wallet_transactions` Table Extensions:**
+   - `payment_id UUID REFERENCES payments(id) ON DELETE RESTRICT`
+
+3. **Database-Level Idempotency Constraints:**
+   ```sql
+   -- Dual unique constraints guarantee strict 1:1 relationship
+   CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_txns_payment_id
+     ON wallet_transactions(payment_id)
+     WHERE payment_id IS NOT NULL;
+
+   CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_wallet_txn_id
+     ON payments(wallet_transaction_id)
+     WHERE wallet_transaction_id IS NOT NULL;
+   ```
+
+4. **Security & Data Invariants:**
+   - Sensitive card numbers, CVVs, UPI PINs, banking passwords, and credentials are NEVER stored.
+   - Authoritative amount created by backend cannot be modified by webhook payloads; amount mismatch triggers `AMOUNT_TAMPERING_DETECTED` and aborts credit.
+   - Row-level locking on `payments` and `wallets` ensures atomic execution with 0 race conditions.
+
+
 

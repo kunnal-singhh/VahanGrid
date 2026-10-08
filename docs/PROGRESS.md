@@ -617,4 +617,47 @@
   - Verified concurrent settlement of different CDRs for the same user serializes cleanly with zero lost balance updates.
   - Regression verified: `test_phase3e2.js` (67/67), `test_phase3e1.js` (50/50), `test_phase3c4a.js` (44/44), `test_phase3d10.js` (81/81), `test_phase3d9.js` (74/74), `test_phase3d8d.js` (72/72), `test_phase3d8b.js` (51/51), `test_phase3d7b.js` (72/72), `test_phase3d6b.js` (56/56), `npm run verify:db` (100% passing).
 
+---
+
+### Phase 3E.4 — Wallet Top-Up & Payment Gateway Integration
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3e4.js` (63/63 tests passing)
+- **Database Migration:** `021_create_payments.sql`
+- **Core Components:**
+  - `backend/src/services/paymentProvider.js`:
+    - Payment provider abstraction adhering to standard contract (`createOrder`, `verifyWebhookSignature`, `verifyPaymentSignature`, `getPaymentStatus`).
+    - India-focused MVP integration with Razorpay protocol, using native Node.js `crypto` HMAC-SHA256 timing-safe verification.
+    - Zero dependency on proprietary external SDKs; operates cleanly in test/sandbox mode with simulated orders and signatures.
+    - Configurable via environment variables (`PAYMENT_PROVIDER`, `PAYMENT_PROVIDER_KEY`, `PAYMENT_PROVIDER_SECRET`, `PAYMENT_WEBHOOK_SECRET`). No real credentials committed.
+  - `backend/src/services/paymentService.js`:
+    - `createPaymentOrder({ userId, amount, currency })`: Validates bounds (₹10 - ₹50,000), checks active wallet, records payment intent in `payments` table, and requests provider order.
+    - `processPaymentWebhook({ rawBody, signature, secret })`: Authoritative server boundary for payment completion. Verifies HMAC-SHA256 signature using `req.rawBody`. Parses events (`order.paid`, `payment.captured`, `payment.failed`).
+    - `verifyAndCreditPayment({ userId, orderId, paymentId, signature })`: Server-verified client callback fulfillment.
+    - `creditWalletForPayment({ providerOrderId, providerPaymentId, providerAmountInRupees, userId })`: Strict atomicity with `SELECT FOR UPDATE` row locks on both `payments` and `wallets`. Derives authoritative balance from signed ledger, inserts `type = 'topup'` into `wallet_transactions`, updates payment status to `'paid'`, and links transaction.
+    - Amount Tampering Defense: Validates provider-reported amount against server-authoritative order amount; mismatches trigger `AMOUNT_TAMPERING_DETECTED` and abort wallet credit.
+    - Database-Level Idempotency: Dual partial unique constraints (`uq_wallet_txns_payment_id` and `uq_payments_wallet_txn_id`) guarantee exactly ONE wallet credit under replay or heavy concurrent delivery.
+    - Safe Status Queries: `getPaymentById(paymentId, userId)` with IDOR prevention and `listUserPayments(userId)`.
+  - `backend/src/app.js`: Configured `express.json` with `verify: (req, _res, buf) => { req.rawBody = buf; }` to preserve intact raw request buffers for signature checking.
+  - `backend/src/controllers/paymentController.js` & `backend/src/routes/payments.js`:
+    - `POST /api/v1/payments/orders`: Authenticated order creation.
+    - `POST /api/v1/payments/webhook`: Public gateway webhook endpoint with signature verification.
+    - `POST /api/v1/payments/verify`: Authenticated checkout completion verification.
+    - `GET /api/v1/payments/:id`: Authenticated payment details with user scoping.
+    - `GET /api/v1/payments`: Authenticated payment history listing.
+- **Regression Suite:**
+  - `test_phase3e4.js`: 63/63 passing.
+  - `test_phase3c4a.js`: 44/44 passing (Wallet read & transaction history).
+  - `test_phase3e3.js`: 86/86 passing (CDR wallet settlement).
+  - `test_phase3e2.js`: 67/67 passing (CDR generation).
+  - `test_phase3e1.js`: 50/50 passing (Tariffs & pricing engine).
+  - `test_phase3d10.js`: 81/81 passing (Smart charging / charging profiles).
+  - `test_phase3d9.js`: 74/74 passing (Remote operations).
+  - `test_phase3d8d.js`: 72/72 passing (ChangeAvailability).
+  - `test_phase3d8b.js`: 51/51 passing (Remote start/stop).
+  - `test_phase3d7b.js`: 72/72 passing (MeterValues telemetry).
+  - `test_phase3d6b.js`: 56/56 passing (TransactionEvent energy sync).
+  - `npm run verify:db`: 100% schema verification passing.
+
+
 

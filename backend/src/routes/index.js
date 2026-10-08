@@ -19,6 +19,7 @@ import sessionsRouter from './sessions.js';
 import walletRouter   from './wallet.js';
 import tariffsRouter  from './tariffs.js';
 import cdrsRouter     from './cdrs.js';
+import paymentsRouter from './payments.js';
 
 // -- Future imports (uncomment as each phase is implemented) ------------------
 // import chargingRouter from './charging.js';
@@ -35,6 +36,7 @@ router.use('/sessions', sessionsRouter);
 router.use('/wallet',   walletRouter);
 router.use('/tariffs',  tariffsRouter);
 router.use('/cdrs',     cdrsRouter);
+router.use('/payments', paymentsRouter);
 
 // -- Future routes --------------------------------------------------------
 // router.use('/charging', chargingRouter);

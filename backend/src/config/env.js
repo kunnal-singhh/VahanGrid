@@ -64,6 +64,15 @@ const config = {
     // 7 days in milliseconds (must match JWT expiry)
     maxAgeMs: 7 * 24 * 60 * 60 * 1000,
   },
+
+  payment: {
+    provider: process.env.PAYMENT_PROVIDER || 'razorpay',
+    keyId: process.env.PAYMENT_KEY_ID || process.env.PAYMENT_PROVIDER_KEY || 'rzp_test_vahangrid',
+    keySecret: process.env.PAYMENT_KEY_SECRET || process.env.PAYMENT_PROVIDER_SECRET || 'test_payment_secret',
+    webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || 'test_webhook_secret',
+    minTopupAmount: 10,
+    maxTopupAmount: 50000,
+  },
 };
 
 export default config;

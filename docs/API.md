@@ -1049,5 +1049,180 @@ Explicitly triggers or retries settlement of a finalized CDR against the authent
 | `403` | `CDR_ACCESS_DENIED` | Authenticated user is not the owner of this CDR |
 | `404` | `CDR_NOT_FOUND` | CDR does not exist in database |
 
+---
+
+## 13. Payments & Wallet Top-up API (Phase 3E.4)
+
+### `POST /api/v1/payments/orders`
+Creates a server-authoritative payment intent/order to top up the authenticated user's wallet.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Validation:** Amount must be positive, between ₹10 and ₹50,000, currency must be `'INR'`.
+- **Integrity:** The backend records the authoritative amount in `payments` table and initiates a gateway order (Razorpay).
+
+#### Request Body
+```json
+{
+  "amount": 500.0,
+  "currency": "INR"
+}
+```
+
+#### Response `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "payment_id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "order_id": "order_a1b2c3d4e5f6g7h8",
+    "amount": 500,
+    "currency": "INR",
+    "status": "created",
+    "key_id": "rzp_test_vahangrid",
+    "provider": "razorpay",
+    "created_at": "2026-10-08T17:30:00.000Z"
+  }
+}
+```
+
+---
+
+### `POST /api/v1/payments/webhook`
+Public endpoint receiving asynchronous webhook events from the payment gateway.
+
+- **Authentication:** HMAC-SHA256 signature verified via `x-razorpay-signature` header against `PAYMENT_WEBHOOK_SECRET` using raw request buffer (`req.rawBody`). Does NOT use JWT.
+- **Idempotency:** Protected by `SELECT FOR UPDATE` on the payment record and database partial unique index (`uq_wallet_txns_payment_id`). Duplicate/replayed webhooks return `200 OK` with `already_processed: true` without double-crediting.
+- **Atomicity:** Payment state transition to `'paid'` and wallet credit ledger insertion (`type = 'topup'`) execute in a single atomic database transaction.
+- **Amount Tampering Defense:** Rejects any webhook payload reporting an amount differing from the server-authoritative payment order amount.
+
+#### Headers
+```http
+Content-Type: application/json
+x-razorpay-signature: <hmac-sha256-hex-signature>
+```
+
+#### Request Body (Sample `order.paid` event)
+```json
+{
+  "event": "order.paid",
+  "payload": {
+    "order": {
+      "entity": {
+        "id": "order_a1b2c3d4e5f6g7h8",
+        "amount": 50000
+      }
+    },
+    "payment": {
+      "entity": {
+        "id": "pay_xyz987654321",
+        "order_id": "order_a1b2c3d4e5f6g7h8",
+        "amount": 50000
+      }
+    }
+  }
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "received": true,
+    "event": "order.paid",
+    "result": {
+      "success": true,
+      "already_processed": false,
+      "payment_id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "status": "paid",
+      "amount": 500.0,
+      "currency": "INR",
+      "transaction_id": "wt_11112222-3333-4444-5555-666677778888",
+      "balance_before": 0.0,
+      "balance_after": 500.0,
+      "completed_at": "2026-10-08T17:31:00.000Z"
+    }
+  }
+}
+```
+
+---
+
+### `POST /api/v1/payments/verify`
+Authenticated client verification endpoint called when the frontend Razorpay checkout callback fires.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Validation:** Verifies `HMAC_SHA256(order_id + '|' + payment_id, key_secret) === signature`.
+
+#### Request Body
+```json
+{
+  "orderId": "order_a1b2c3d4e5f6g7h8",
+  "paymentId": "pay_xyz987654321",
+  "signature": "<razorpay-signature>"
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "already_processed": false,
+    "payment_id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "status": "paid",
+    "amount": 500.0,
+    "currency": "INR",
+    "transaction_id": "wt_11112222-3333-4444-5555-666677778888",
+    "balance_before": 0.0,
+    "balance_after": 500.0,
+    "completed_at": "2026-10-08T17:31:00.000Z"
+  }
+}
+```
+
+---
+
+### `GET /api/v1/payments/:id`
+Retrieves details of a specific payment order.
+
+- **Authentication:** Required.
+- **Access Control:** User-isolated (returns `403 FORBIDDEN` for other users' payments to prevent IDOR).
+- **Security:** Gateway secrets, keys, and webhook signing materials are strictly excluded.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "user_id": "b0000001-0000-0000-0000-000000000001",
+    "wallet_id": "w0000001-0000-0000-0000-000000000001",
+    "provider": "razorpay",
+    "provider_order_id": "order_a1b2c3d4e5f6g7h8",
+    "provider_payment_id": "pay_xyz987654321",
+    "amount": 500.0,
+    "currency": "INR",
+    "status": "paid",
+    "wallet_transaction_id": "wt_11112222-3333-4444-5555-666677778888",
+    "error_code": null,
+    "error_description": null,
+    "created_at": "2026-10-08T17:30:00.000Z",
+    "updated_at": "2026-10-08T17:31:00.000Z",
+    "completed_at": "2026-10-08T17:31:00.000Z"
+  }
+}
+```
+
+---
+
+### `GET /api/v1/payments`
+Lists payment history for the authenticated user, newest first.
+
+- **Authentication:** Required.
+- **Pagination:** Supports `limit` (default 50) and `offset` (default 0) query parameters.
+
+
 
 

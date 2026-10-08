@@ -51,9 +51,13 @@ app.use(cors(corsOptions));
 app.use(morgan(config.isDev ? 'dev' : 'combined'));
 
 // ── 4. Body parsing ───────────────────────────────────────────────────────────
-// Parse incoming JSON request bodies. Express throws a 400 automatically if
-// the body is malformed JSON — this is caught by errorHandler below.
-app.use(express.json({ limit: '10kb' })); // Reject payloads > 10 KB
+// Parse incoming JSON request bodies. Retain raw body buffer for HMAC webhook signature verification.
+app.use(express.json({
+  limit: '100kb',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: false }));
 
 // ── 5. Cookie parsing ─────────────────────────────────────────────────────────
