@@ -26,10 +26,34 @@
 | **Phase 3D.7B**| OCPP MeterValues Telemetry & Dual-Tier Storage             | ✅ Complete | `test_phase3d7b.js` (72/72 passed) |
 | **Phase 3D.8B**| OCPP Remote Start/Stop Command Infrastructure               | ✅ Complete | `test_phase3d8b.js` (51/51 passed) |
 | **Phase 3D.8D**| OCPP ChangeAvailability Implementation                      | ✅ Complete | `test_phase3d8d.js` (72/72 passed) |
+| **Phase 3D.9** | OCPP Remote Operations: Reset, Unlock & TriggerMessage      | ✅ Complete | `test_phase3d9.js` (74/74 passed)  |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.9 — OCPP Remote Operations: Reset, UnlockConnector & TriggerMessage
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d9.js` (74/74 tests passing)
+- **Regression Suite:** `test_phase3d8d.js` (72/72 passed), `test_phase3d8b.js` (51/51 passed), `test_phase3d7b.js` (72/72 passed), `test_phase3d6b.js` (56/56 passed), `test_phase3d6a.js` (76/76 passed), `test_phase3d5.js` (79/79 passed), `test_phase3d4b.js` (82/82 passed), `test_phase3d4a.js` (62/62 passed), `test_phase3d3.js` (55/55 passed), `test_phase3d2.js` (47/47 passed)
+- **Compliance Notice:** *"VahanGrid implements OCPP 2.0.1 remote operations for Reset (Immediate/OnIdle across station and EVSE scopes), UnlockConnector (cable release), and TriggerMessage (diagnostic and state synchronization triggers) via authenticated REST APIs, with zero state fabrication and complete preservation of event-driven state authority."*
+
+#### Architectural Design & Implementation:
+1. **Remote Operations Service (`remoteOperationService.js`):**
+   - **Reset (`POST /api/v1/stations/:id/reset`):** Supports `type` (`Immediate`, `OnIdle`) and optional `evse_id`. Dispatches `Reset` CALL frames. Handles single and multi-charge-point fan-out. Maps rejections to `409 RESET_REJECTED`. Preserves state authority (no premature session or connector termination).
+   - **UnlockConnector (`POST /api/v1/stations/:id/unlock-connector`):** Requires `connector_id`. Reverse-maps to `ocpp_evse_id` and `ocpp_connector_id`. Dispatches `UnlockConnector` CALL frame. Maps `OngoingAuthorizedTransaction` to `409 ONGOING_AUTHORIZED_TRANSACTION` and `UnlockFailed` to `409 UNLOCK_FAILED`. Does not alter connector status in DB.
+   - **TriggerMessage (`POST /api/v1/stations/:id/trigger-message`):** Supports `requestedMessage` (`StatusNotification`, `MeterValues`, `Heartbeat`, `BootNotification`, `TransactionEvent`) with optional `connector_id` or `evse_id` targeting. Dispatches `TriggerMessage` CALL frame. Maps `NotImplemented` to `501 NOT_IMPLEMENTED` and rejection to `409 TRIGGER_MESSAGE_REJECTED`. Subsequent incoming messages are processed naturally by existing handlers.
+
+2. **REST API Integration (`stations.js`, `stationController.js`):**
+   - Mounted `POST /api/v1/stations/:id/reset`, `POST /api/v1/stations/:id/unlock-connector`, and `POST /api/v1/stations/:id/trigger-message`.
+   - All guarded with JWT `authenticate` middleware.
+   - Validates input formats and returns structured standardized success/error responses.
+
+3. **Zero Database Schema Changes:**
+   - All three remote operations are transient control commands orchestrated through `ocppCallManager` and existing device mappings without new tables or migrations.
+
+---
 
 ### Phase 3D.8D — OCPP ChangeAvailability Implementation
 - **Status:** Completed

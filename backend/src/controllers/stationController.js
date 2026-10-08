@@ -12,6 +12,7 @@
 
 import * as stationService from '../services/stationService.js';
 import * as availabilityService from '../services/availabilityService.js';
+import * as remoteOperationService from '../services/remoteOperationService.js';
 
 // Regex to validate 8-4-4-4-12 hex UUID format
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -202,3 +203,118 @@ export async function changeAvailabilityHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * POST /api/v1/stations/:id/reset
+ * Trigger a soft (OnIdle) or hard (Immediate) reboot of a charging station or EVSE.
+ */
+export async function resetStationHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await remoteOperationService.reset(id, req.body || {});
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'RESET_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/stations/:id/unlock-connector
+ * Remotely unlock a specific connector cable lock.
+ */
+export async function unlockConnectorHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await remoteOperationService.unlockConnector(id, req.body || {});
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'UNLOCK_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/stations/:id/trigger-message
+ * Remotely trigger diagnostic/state message transmission from a charging station.
+ */
+export async function triggerMessageHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await remoteOperationService.triggerMessage(id, req.body || {});
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'TRIGGER_MESSAGE_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
