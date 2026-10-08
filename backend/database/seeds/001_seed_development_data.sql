@@ -194,4 +194,12 @@ VALUES
   )
 ON CONFLICT (id) DO NOTHING;
 
+-- 10. TARIFFS (Phase 3E.1)
+INSERT INTO tariffs (id, name, description, cpo_id, location_id, currency, price_per_kwh, session_fee, price_per_minute, idle_fee_per_minute, grace_period_minutes, tax_rate, is_active)
+VALUES
+  ('e0000001-0000-0000-0000-000000000001', 'Tata Power Standard Tariff', 'Standard network pricing for Tata Power EZ Charge hubs', 'a0000001-0000-0000-0000-000000000001', NULL, 'INR', 18.5000, 10.00, 0.0000, 1.0000, 15, 0.1800, true),
+  ('e0000001-0000-0000-0000-000000000002', 'Statiq City Standard Tariff', 'City charging pricing for Statiq stations', 'a0000001-0000-0000-0000-000000000002', NULL, 'INR', 16.0000, 0.00, 0.2000, 1.5000, 10, 0.1800, true),
+  ('e0000001-0000-0000-0000-000000000003', 'Aerocity Hub Special Tariff', 'Discounted commercial rate for Delhi Aerocity Hub', 'a0000001-0000-0000-0000-000000000001', 'f0000001-0000-0000-0000-000000000001', 'INR', 15.0000, 5.00, 0.0000, 2.0000, 15, 0.1800, true)
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

@@ -15,6 +15,7 @@ import {
   triggerMessageHandler,
   setChargingProfileHandler,
   clearChargingProfileHandler,
+  getStationTariffHandler,
 } from '../controllers/stationController.js';
 import { authenticate } from '../middleware/authenticate.js';
 
@@ -49,6 +50,9 @@ router.post('/:id/clear-charging-profile', authenticate, clearChargingProfileHan
 
 // 10. DELETE /api/v1/stations/:id/charging-profiles (OCPP 2.0.1 ClearChargingProfile alias)
 router.delete('/:id/charging-profiles', authenticate, clearChargingProfileHandler);
+
+// 11. GET /api/v1/stations/:id/tariff (Resolve active station tariff)
+router.get('/:id/tariff', getStationTariffHandler);
 
 export default router;
 

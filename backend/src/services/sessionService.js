@@ -26,6 +26,8 @@ import {
   resolveOcppIdentityByConnector,
   resolveOcppIdentityBySession,
 } from './ocppMappingService.js';
+import { resolveApplicableTariff } from './tariffService.js';
+import { buildTariffSnapshot, calculatePrice } from './pricingService.js';
 
 // ---------------------------------------------------------------------------
 // SELECT fragments
@@ -37,6 +39,9 @@ const SESSION_LIST_FIELDS = `
   cs.user_id,
   cs.vehicle_id,
   cs.connector_id,
+  cs.tariff_id,
+  cs.tariff_snapshot,
+  cs.pricing_breakdown,
   cs.started_at,
   cs.ended_at,
   cs.start_soc,
@@ -65,6 +70,9 @@ const RICH_SESSION_SQL = `
     cs.user_id,
     cs.vehicle_id,
     cs.connector_id,
+    cs.tariff_id,
+    cs.tariff_snapshot,
+    cs.pricing_breakdown,
     cs.started_at,
     cs.ended_at,
     cs.start_soc,
@@ -261,13 +269,34 @@ export async function startSession(userId, connectorId, vehicleId, options = {})
       throw err;
     }
 
+    // Resolve applicable tariff hierarchy and snapshot
+    const hierRes = await client.query(
+      `SELECT cn.id AS connector_id, e.id AS evse_id, l.id AS location_id, l.cpo_id
+       FROM connectors cn
+       JOIN evses e ON cn.evse_id = e.id
+       JOIN locations l ON e.location_id = l.id
+       WHERE cn.id = $1`,
+      [connectorId]
+    );
+
+    const hier = hierRes.rows[0];
+    const applicableTariff = hier ? await resolveApplicableTariff({
+      connector_id: hier.connector_id,
+      evse_id: hier.evse_id,
+      location_id: hier.location_id,
+      cpo_id: hier.cpo_id,
+    }) : null;
+
+    const tariffSnapshot = applicableTariff ? buildTariffSnapshot(applicableTariff) : null;
+    const tariffId = applicableTariff ? applicableTariff.id : null;
+
     // Create the session. Status defaults to 'active'.
     const insertResult = await client.query(
       `INSERT INTO charging_sessions
-         (user_id, vehicle_id, connector_id, status)
-       VALUES ($1, $2, $3, 'active')
+         (user_id, vehicle_id, connector_id, status, tariff_id, tariff_snapshot)
+       VALUES ($1, $2, $3, 'active', $4, $5)
        RETURNING id`,
-      [userId, vehicleId, connectorId]
+      [userId, vehicleId, connectorId, tariffId, tariffSnapshot ? JSON.stringify(tariffSnapshot) : null]
     );
 
     const newSessionId = insertResult.rows[0].id;
@@ -376,7 +405,8 @@ export async function stopSession(sessionId, userId, options = {}) {
 
     // Lock the session row to prevent race conditions.
     const lockResult = await client.query(
-      `SELECT id, user_id, connector_id, status FROM charging_sessions
+      `SELECT id, user_id, connector_id, status, started_at, energy_kwh, tariff_snapshot, currency
+       FROM charging_sessions
        WHERE id = $1 AND user_id = $2
        FOR UPDATE`,
       [sessionId, userId]
@@ -397,16 +427,35 @@ export async function stopSession(sessionId, userId, options = {}) {
       throw err;
     }
 
-    // Update session: compute duration from started_at to now, set status = 'stopped'.
+    // Compute duration
+    const startedAtTime = new Date(session.started_at).getTime();
+    const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtTime) / 1000));
+
+    let finalCost = 0.00;
+    let pricingBreakdown = null;
+
+    if (session.tariff_snapshot) {
+      const calc = calculatePrice(session.tariff_snapshot, {
+        energy_kwh: Number(session.energy_kwh || 0),
+        duration_seconds: durationSeconds,
+        idle_seconds: 0,
+      });
+      finalCost = calc.total_cost;
+      pricingBreakdown = calc;
+    }
+
+    // Update session: compute duration from started_at to now, set status = 'stopped', update cost & pricing_breakdown.
     await client.query(
       `UPDATE charging_sessions
        SET
-         status           = 'stopped',
-         ended_at         = CURRENT_TIMESTAMP,
-         duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer),
-         updated_at       = CURRENT_TIMESTAMP
+         status            = 'stopped',
+         ended_at          = CURRENT_TIMESTAMP,
+         duration_seconds  = GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer),
+         cost_amount       = $2,
+         pricing_breakdown = $3,
+         updated_at        = CURRENT_TIMESTAMP
        WHERE id = $1`,
-      [sessionId]
+      [sessionId, finalCost, pricingBreakdown ? JSON.stringify(pricingBreakdown) : null]
     );
 
     // Reset connector status back to 'available'
@@ -546,13 +595,34 @@ export async function remoteStartSession(userId, connectorId, vehicleId, options
       throw err;
     }
 
+    // Resolve applicable tariff hierarchy and snapshot
+    const hierRes = await client.query(
+      `SELECT cn.id AS connector_id, e.id AS evse_id, l.id AS location_id, l.cpo_id
+       FROM connectors cn
+       JOIN evses e ON cn.evse_id = e.id
+       JOIN locations l ON e.location_id = l.id
+       WHERE cn.id = $1`,
+      [connectorId]
+    );
+
+    const hier = hierRes.rows[0];
+    const applicableTariff = hier ? await resolveApplicableTariff({
+      connector_id: hier.connector_id,
+      evse_id: hier.evse_id,
+      location_id: hier.location_id,
+      cpo_id: hier.cpo_id,
+    }) : null;
+
+    const tariffSnapshot = applicableTariff ? buildTariffSnapshot(applicableTariff) : null;
+    const tariffId = applicableTariff ? applicableTariff.id : null;
+
     // Insert session in 'pending' state
     const insertResult = await client.query(
       `INSERT INTO charging_sessions
-         (user_id, vehicle_id, connector_id, status)
-       VALUES ($1, $2, $3, 'pending')
+         (user_id, vehicle_id, connector_id, status, tariff_id, tariff_snapshot)
+       VALUES ($1, $2, $3, 'pending', $4, $5)
        RETURNING id`,
-      [userId, vehicleId, connectorId]
+      [userId, vehicleId, connectorId, tariffId, tariffSnapshot ? JSON.stringify(tariffSnapshot) : null]
     );
     newSessionId = insertResult.rows[0].id;
 

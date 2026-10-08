@@ -17,6 +17,7 @@ import usersRouter    from './users.js';
 import vehiclesRouter from './vehicles.js';
 import sessionsRouter from './sessions.js';
 import walletRouter   from './wallet.js';
+import tariffsRouter  from './tariffs.js';
 
 // -- Future imports (uncomment as each phase is implemented) ------------------
 // import chargingRouter from './charging.js';
@@ -31,6 +32,7 @@ router.use('/users',    usersRouter);
 router.use('/vehicles', vehiclesRouter);
 router.use('/sessions', sessionsRouter);
 router.use('/wallet',   walletRouter);
+router.use('/tariffs',  tariffsRouter);
 
 // -- Future routes --------------------------------------------------------
 // router.use('/charging', chargingRouter);

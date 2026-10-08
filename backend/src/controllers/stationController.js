@@ -14,6 +14,7 @@ import * as stationService from '../services/stationService.js';
 import * as availabilityService from '../services/availabilityService.js';
 import * as remoteOperationService from '../services/remoteOperationService.js';
 import * as chargingProfileService from '../services/chargingProfileService.js';
+import * as tariffService from '../services/tariffService.js';
 
 // Regex to validate 8-4-4-4-12 hex UUID format
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -405,5 +406,68 @@ export async function clearChargingProfileHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * GET /api/v1/stations/:id/tariff
+ * Retrieve the active applicable tariff for a station.
+ */
+export async function getStationTariffHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const station = await stationService.getStationById(id);
+    if (!station) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'STATION_NOT_FOUND',
+          message: `Station with ID '${id}' was not found.`,
+        },
+      });
+    }
+
+    const tariff = await tariffService.resolveApplicableTariff({
+      location_id: id,
+      cpo_id: station.cpo_id || (station.cpo ? station.cpo.id : null),
+    });
+
+    if (!tariff) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NO_APPLICABLE_TARIFF',
+          message: 'No active tariff configured for this station.',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: tariff,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'TARIFF_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
 
 
