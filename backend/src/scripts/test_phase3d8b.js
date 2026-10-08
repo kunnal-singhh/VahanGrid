@@ -553,6 +553,7 @@ async function runTests() {
     await query(`DELETE FROM ocpp_evse_mappings WHERE id = $1`, [evseMapUUID]);
     await query(`DELETE FROM ocpp_transactions WHERE ocpp_charge_point_id = $1`, [cpUUID]);
     await query(`DELETE FROM ocpp_charge_points WHERE id = $1`, [cpUUID]);
+    await query(`DELETE FROM cdrs WHERE user_id = $1`, [user1Id]);
     await query(`DELETE FROM charging_sessions WHERE user_id = $1`, [user1Id]);
     await query(`DELETE FROM vehicles WHERE user_id = $1`, [user1Id]);
     await query(`DELETE FROM wallet_transactions WHERE wallet_id IN (SELECT id FROM wallets WHERE user_id = $1)`, [user1Id]);

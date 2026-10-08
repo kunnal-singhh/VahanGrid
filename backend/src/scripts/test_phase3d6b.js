@@ -847,6 +847,7 @@ async function runTests() {
     await query(`DELETE FROM ocpp_transactions WHERE ocpp_charge_point_id = $1`, [cpUUID]);
     await query(`DELETE FROM ocpp_charge_points WHERE id = $1`, [cpUUID]);
     if (activeSessionId) {
+      await query(`DELETE FROM cdrs WHERE session_id = $1`, [activeSessionId]);
       await query(`DELETE FROM charging_sessions WHERE id = $1`, [activeSessionId]);
     }
     if (testUserId) {

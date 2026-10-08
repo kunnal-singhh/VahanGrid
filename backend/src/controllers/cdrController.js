@@ -13,6 +13,7 @@
  */
 
 import * as cdrService from '../services/cdrService.js';
+import { settleCdr } from '../services/walletSettlementService.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -131,3 +132,47 @@ export async function getCdrBySessionHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * POST /api/v1/cdrs/:id/settle
+ * Explicitly triggers or retries settlement for an authenticated user's CDR.
+ * Ownership is enforced: users can only settle their own CDRs.
+ */
+export async function settleCdrHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_CDR_ID',
+          message: 'CDR ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await settleCdr(id, {
+      userId: req.user.id,
+      throwOnInsufficient: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'SETTLEMENT_ERROR',
+          message: err.message,
+          details: err.details || undefined,
+        },
+      });
+    }
+    next(err);
+  }
+}
+

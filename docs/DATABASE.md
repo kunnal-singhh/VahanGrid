@@ -199,3 +199,37 @@ Finalized immutable billing records generated when a session terminates (`comple
 - **Snapshots:** Copies `cpo_name`, `location_name`, `location_city`, `connector_standard`, `tariff_snapshot` (JSONB), and `pricing_breakdown` (JSONB) so post-facto entity renames or tariff revisions cannot alter settled bills.
 - **Precision:** `energy_kwh NUMERIC(8,3)`, `total_amount NUMERIC(10,2)` (never float).
 
+---
+
+## 8. Wallet Settlement & CDR Integration (Phase 3E.3 - Migration `020_add_cdr_wallet_settlement.sql`)
+
+### Settlement Architecture
+Wallet settlement reconciles finalized CDRs against the user's signed ledger wallet atomically and idempotently.
+
+### Schema Additions:
+1. **`cdrs` Table Extensions:**
+   - `settlement_status VARCHAR(20) NOT NULL DEFAULT 'unsettled'` (`CHECK (settlement_status IN ('unsettled', 'settled', 'failed'))`)
+   - `settled_at TIMESTAMPTZ`
+   - `settlement_failure_reason VARCHAR(100)`
+   - `wallet_transaction_id UUID REFERENCES wallet_transactions(id) ON DELETE SET NULL`
+   - Indexes: `idx_cdrs_settlement_status`, `idx_cdrs_wallet_txn_id`
+
+2. **`wallet_transactions` Table Extensions:**
+   - `cdr_id UUID REFERENCES cdrs(id) ON DELETE CASCADE`
+   - `balance_before NUMERIC(12, 2)`
+   - `balance_after NUMERIC(12, 2)`
+   - **Database-Level Idempotency Index:**
+     ```sql
+     CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_txns_cdr_id
+       ON wallet_transactions(cdr_id)
+       WHERE cdr_id IS NOT NULL;
+     ```
+     Guarantees that regardless of concurrent triggers, retries, or server restarts, a CDR can never be debited more than once.
+
+3. **Concurrency & Atomicity Guarantees:**
+   - PostgreSQL row locks (`SELECT ... FROM wallets WHERE user_id = $1 FOR UPDATE` and `SELECT ... FROM cdrs WHERE id = $1 FOR UPDATE`) serialize all financial movements per user.
+   - Authoritative balance is computed inside the locked transaction via `SELECT COALESCE(SUM(amount), 0)::numeric(12, 2) FROM wallet_transactions WHERE wallet_id = $1`.
+   - Insufficient funds strictly reject the debit, create no debt, and record `settlement_status = 'failed'` with `settlement_failure_reason = 'INSUFFICIENT_FUNDS'`.
+   - Zero-amount sessions (`total_amount = 0.00`) are marked settled without inserting into `wallet_transactions`, respecting the `amount <> 0.00` check constraint.
+
+

@@ -21,6 +21,7 @@
 
 import { query } from '../config/database.js';
 import { calculatePrice } from './pricingService.js';
+import { settleCdr } from './walletSettlementService.js';
 
 const BILLABLE_STATUSES = new Set(['completed', 'stopped']);
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -206,16 +207,30 @@ export async function finalizeCdr(sessionId) {
       ]
     );
 
+    let cdr;
     // ON CONFLICT DO NOTHING returns 0 rows — fetch the existing CDR
     if (result.rows.length === 0) {
-      return await getCdrBySessionId(ctx.session_id);
+      cdr = await getCdrBySessionId(ctx.session_id);
+    } else {
+      cdr = result.rows[0];
     }
 
-    return result.rows[0];
+    // Trigger wallet settlement asynchronously (non-blocking)
+    if (cdr && cdr.id) {
+      settleCdr(cdr.id).catch((settleErr) => {
+        console.error(`[Settlement] Auto-settlement notice for CDR ${cdr.id}:`, settleErr.message);
+      });
+    }
+
+    return cdr;
   } catch (err) {
     // 23505 = unique_violation (race condition — CDR already created by concurrent path)
     if (err.code === '23505') {
-      return await getCdrBySessionId(ctx.session_id);
+      const existing = await getCdrBySessionId(ctx.session_id);
+      if (existing && existing.id) {
+        settleCdr(existing.id).catch(() => {});
+      }
+      return existing;
     }
     throw err;
   }

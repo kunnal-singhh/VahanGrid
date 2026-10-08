@@ -12,14 +12,15 @@
  */
 
 import { Router } from 'express';
-import { listCdrsHandler, getCdrByIdHandler } from '../controllers/cdrController.js';
+import { listCdrsHandler, getCdrByIdHandler, settleCdrHandler } from '../controllers/cdrController.js';
 import { authenticate } from '../middleware/authenticate.js';
 
 const router = Router();
 
 router.use(authenticate);
 
-router.get('/',    listCdrsHandler);
-router.get('/:id', getCdrByIdHandler);
+router.get('/',           listCdrsHandler);
+router.get('/:id',        getCdrByIdHandler);
+router.post('/:id/settle', settleCdrHandler);
 
 export default router;

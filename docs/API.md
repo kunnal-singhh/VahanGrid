@@ -1004,6 +1004,50 @@ List all CDRs belonging to the authenticated user.
 Retrieve full immutable CDR details for the specified CDR UUID.
 
 #### Response `200 OK`
-Returns the full CDR record including immutable snapshots (`tariff_snapshot`, `pricing_breakdown`), physical meters (`meter_start_wh`, `meter_stop_wh`), and station metadata snapshots.
+Returns the full CDR record including immutable snapshots (`tariff_snapshot`, `pricing_breakdown`), physical meters (`meter_start_wh`, `meter_stop_wh`), settlement status (`settlement_status`, `settled_at`, `wallet_transaction_id`), and station metadata snapshots.
+
+---
+
+### `POST /api/v1/cdrs/:id/settle`
+
+Explicitly triggers or retries settlement of a finalized CDR against the authenticated user's wallet.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Access Control:** Enforces ownership — returns `403 FORBIDDEN` (`CDR_ACCESS_DENIED`) if requested for another user's CDR.
+- **Source of Truth:** The settlement amount is strictly taken from the immutable `cdr.total_amount`. The client cannot specify or tamper with the settlement amount.
+- **Idempotency:** Protected at both application layer and DB unique index (`uq_wallet_txns_cdr_id`). Re-calling on an already settled CDR returns `200 OK` with `already_settled: true` without double-debiting.
+- **Zero-Amount Sessions:** For ₹0.00 sessions, marks `settlement_status = 'settled'` without creating an invalid ₹0.00 ledger transaction.
+
+#### Response `200 OK` (Successful Settlement)
+```json
+{
+  "success": true,
+  "data": {
+    "settled": true,
+    "already_settled": false,
+    "cdr_id": "c0000001-0000-0000-0000-000000000001",
+    "wallet_id": "w0000001-0000-0000-0000-000000000001",
+    "amount": 150.0,
+    "currency": "INR",
+    "balance_before": 500.0,
+    "balance_after": 350.0,
+    "transaction_id": "t0000001-0000-0000-0000-000000000001",
+    "settled_at": "2026-10-08T17:15:00.000Z",
+    "status": "settled"
+  }
+}
+```
+
+#### Error Responses
+
+| Status | `error.code` | Cause |
+|---|---|---|
+| `400` | `INVALID_CDR_ID` | `:id` is not a valid UUID format |
+| `400` | `CDR_NOT_FINALIZED` | CDR is still in pending/unfinalized status |
+| `400` | `INSUFFICIENT_FUNDS` | Wallet balance is lower than CDR amount; no partial debit performed |
+| `401` | `MISSING_TOKEN` | Request lacks valid authentication |
+| `403` | `CDR_ACCESS_DENIED` | Authenticated user is not the owner of this CDR |
+| `404` | `CDR_NOT_FOUND` | CDR does not exist in database |
+
 
 

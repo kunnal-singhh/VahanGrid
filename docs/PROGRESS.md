@@ -593,3 +593,28 @@
     - Hooked into `sessionService.stopSession()` post-commit via non-blocking asynchronous dispatch.
     - Hooked into `transactionEventHandler.handleEndedEvent()` for OCPP 2.0.1 transaction completion, computing pricing breakdowns for OCPP-terminated sessions.
 
+---
+
+### Phase 3E.3 — Wallet Settlement & CDR Integration
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3e3.js` (86/86 tests passing)
+- **Database Migration:** `020_add_cdr_wallet_settlement.sql`
+- **Core Components:**
+  - `backend/src/services/walletSettlementService.js`:
+    - `settleCdr(cdrId, options)`: Core atomic settlement engine. Locks wallet and CDR rows with `FOR UPDATE`, computes authoritative balance from `wallet_transactions` signed ledger, checks sufficiency, inserts `charging_payment` transaction, and updates CDR settlement status.
+    - Full decimal precision (`NUMERIC(12, 2)`), zero floating-point drift.
+    - Enforces DB-level idempotency via `uq_wallet_txns_cdr_id` partial unique index on `wallet_transactions(cdr_id)`.
+    - Handles zero-amount CDRs without violating `amount <> 0.00` check constraint.
+    - Rejects negative balance and partial debits when balance is insufficient; marks CDR `settlement_status = 'failed'` with `INSUFFICIENT_FUNDS` reason while keeping the CDR valid and retryable.
+    - `getSettlementStatus(cdrId, userId)`: Reads settlement state, transaction metrics, and balance before/after.
+  - `backend/src/services/cdrService.js`:
+    - Integrated automatic non-blocking settlement dispatch upon CDR finalization.
+  - `backend/src/controllers/cdrController.js` & `backend/src/routes/cdrs.js`:
+    - `POST /api/v1/cdrs/:id/settle`: Authenticated endpoint to trigger or retry settlement of a finalized CDR. Enforces ownership (`CDR_ACCESS_DENIED` 403 on mismatch) and takes settlement amount strictly from immutable CDR total.
+- **Concurrency & Regressions:**
+  - Verified concurrent settlement of same CDR produces exactly 1 debit.
+  - Verified concurrent settlement of different CDRs for the same user serializes cleanly with zero lost balance updates.
+  - Regression verified: `test_phase3e2.js` (67/67), `test_phase3e1.js` (50/50), `test_phase3c4a.js` (44/44), `test_phase3d10.js` (81/81), `test_phase3d9.js` (74/74), `test_phase3d8d.js` (72/72), `test_phase3d8b.js` (51/51), `test_phase3d7b.js` (72/72), `test_phase3d6b.js` (56/56), `npm run verify:db` (100% passing).
+
+
