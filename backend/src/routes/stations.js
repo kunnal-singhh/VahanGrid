@@ -13,6 +13,8 @@ import {
   resetStationHandler,
   unlockConnectorHandler,
   triggerMessageHandler,
+  setChargingProfileHandler,
+  clearChargingProfileHandler,
 } from '../controllers/stationController.js';
 import { authenticate } from '../middleware/authenticate.js';
 
@@ -38,6 +40,15 @@ router.post('/:id/unlock-connector', authenticate, unlockConnectorHandler);
 
 // 7. POST /api/v1/stations/:id/trigger-message (OCPP 2.0.1 TriggerMessage)
 router.post('/:id/trigger-message', authenticate, triggerMessageHandler);
+
+// 8. POST /api/v1/stations/:id/charging-profiles (OCPP 2.0.1 SetChargingProfile)
+router.post('/:id/charging-profiles', authenticate, setChargingProfileHandler);
+
+// 9. POST /api/v1/stations/:id/clear-charging-profile (OCPP 2.0.1 ClearChargingProfile)
+router.post('/:id/clear-charging-profile', authenticate, clearChargingProfileHandler);
+
+// 10. DELETE /api/v1/stations/:id/charging-profiles (OCPP 2.0.1 ClearChargingProfile alias)
+router.delete('/:id/charging-profiles', authenticate, clearChargingProfileHandler);
 
 export default router;
 

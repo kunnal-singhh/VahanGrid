@@ -27,10 +27,42 @@
 | **Phase 3D.8B**| OCPP Remote Start/Stop Command Infrastructure               | ✅ Complete | `test_phase3d8b.js` (51/51 passed) |
 | **Phase 3D.8D**| OCPP ChangeAvailability Implementation                      | ✅ Complete | `test_phase3d8d.js` (72/72 passed) |
 | **Phase 3D.9** | OCPP Remote Operations: Reset, Unlock & TriggerMessage      | ✅ Complete | `test_phase3d9.js` (74/74 passed)  |
+| **Phase 3D.10**| OCPP 2.0.1 Smart Charging / Charging Profiles               | ✅ Complete | `test_phase3d10.js` (81/81 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.10 — OCPP 2.0.1 Smart Charging / Charging Profiles
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d10.js` (81/81 tests passing)
+- **Regression Suite:** `test_phase3d9.js` (74/74 passed), `test_phase3d8d.js` (72/72 passed), `test_phase3d8b.js` (51/51 passed), `test_phase3d7b.js` (72/72 passed), `test_phase3d6b.js` (56/56 passed)
+- **Compliance Notice:** *"VahanGrid implements OCPP 2.0.1 Smart Charging and Charging Profile orchestration (SetChargingProfile and ClearChargingProfile) across Station, EVSE, Connector, and active Transaction scopes via authenticated REST APIs, with zero state fabrication, zero unnecessary database migrations, and strict adherence to protocol state authority."*
+
+#### Architectural Design & Implementation:
+1. **Smart Charging Service (`chargingProfileService.js`):**
+   - **SetChargingProfile (`POST /api/v1/stations/:id/charging-profiles`):**
+     - Supports hierarchical scopes: Station-level (`evseId = 0`), EVSE-level (`evse_id`), Connector-level (`connector_id`), and active Transaction/Session-level (`session_id`).
+     - Validates profile attributes and sub-structures: `id`, `stackLevel`, `chargingProfilePurpose` (`ChargingStationMaxProfile`, `TxDefaultProfile`, `TxProfile`), `chargingProfileKind` (`Absolute`, `Recurring`, `Relative`), `recurrencyKind` (`Daily`, `Weekly`), `validFrom`, `validTo`, `transactionId`, `chargingSchedule` (with `chargingRateUnit` `W` or `A`, `chargingSchedulePeriod` with `startPeriod`, `limit`, `numberPhases`, `phaseToUse`).
+     - Enforces scope constraints: `ChargingStationMaxProfile` requires `evseId = 0` (cannot target EVSE or connector); `TxProfile` requires valid `evseId > 0` and active `transactionId` (automatically bound if `session_id` provided).
+     - Session security: verifies that regular users cannot configure charging profiles on active sessions belonging to other users (403 Forbidden).
+     - Outbound CALL dispatching via `ocppCallManager.sendCall()`. Handles single and multi-charge-point fan-out. Maps rejections to `409 CHARGING_PROFILE_REJECTED`, timeouts to `504 STATION_TIMEOUT`, and offline devices to `503 STATION_OFFLINE`.
+   - **ClearChargingProfile (`POST /api/v1/stations/:id/clear-charging-profile` & `DELETE /api/v1/stations/:id/charging-profiles`):**
+     - Supports clearing by `chargingProfileId`, criteria filters (`chargingProfilePurpose`, `stackLevel`, `evseId`), or targeted `evse_id`/`connector_id`.
+     - Dispatches `ClearChargingProfile` CALL frames. Handles `Accepted` (cleared) and `Unknown` (no profile found, returns 200 with `{ status: "Unknown", cleared: false }`).
+   - **GetChargingProfiles (Explicitly Deferred):**
+     - In OCPP 2.0.1, `GetChargingProfiles` is an asynchronous reporting protocol where the charger acknowledges with `Accepted` and asynchronously delivers profiles via inbound `ReportChargingProfilesRequest` CALL frames. Synchronous REST retrieval would require either an asynchronous report state machine or maintaining an artificial profile ledger. Consistent with MVP principles, the charger remains the operational authority and `GetChargingProfiles` is cleanly deferred.
+
+2. **Strict State Authority:**
+   - Acknowledging a charging profile does NOT modify `connectors.status`, `evses.status`, or `charging_sessions.status`.
+   - A charging profile represents a power/current constraint instruction, not an availability or state change. Actual physical charging performance continues to be monitored authoritatively through `MeterValues` and `TransactionEvent`.
+
+3. **Zero Database Schema Changes:**
+   - "Phase 3D.10 requires no database migration."
+   - The charging station is the physical execution and operational source of truth for active profiles. Outbound control commands are transiently orchestrated without table bloat.
+
+---
 
 ### Phase 3D.9 — OCPP Remote Operations: Reset, UnlockConnector & TriggerMessage
 - **Status:** Completed

@@ -13,6 +13,7 @@
 import * as stationService from '../services/stationService.js';
 import * as availabilityService from '../services/availabilityService.js';
 import * as remoteOperationService from '../services/remoteOperationService.js';
+import * as chargingProfileService from '../services/chargingProfileService.js';
 
 // Regex to validate 8-4-4-4-12 hex UUID format
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -317,4 +318,92 @@ export async function triggerMessageHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * POST /api/v1/stations/:id/charging-profiles
+ * Configure an OCPP 2.0.1 smart charging profile for a station, EVSE, connector, or active session.
+ */
+export async function setChargingProfileHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await chargingProfileService.setChargingProfile(
+      id,
+      req.body || {},
+      { user: req.user }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'CHARGING_PROFILE_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/stations/:id/clear-charging-profile
+ * DELETE /api/v1/stations/:id/charging-profiles
+ * Clear an OCPP 2.0.1 smart charging profile by ID, criteria, or targeted EVSE/connector.
+ */
+export async function clearChargingProfileHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    // Accept parameters from body, or fallback to query params for DELETE requests
+    const params = {
+      ...(req.query || {}),
+      ...(req.body || {}),
+    };
+
+    const result = await chargingProfileService.clearChargingProfile(id, params);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'CLEAR_CHARGING_PROFILE_ERROR',
+          message: err.message,
+        },
+      });
+    }
+    next(err);
+  }
+}
+
 
