@@ -11,6 +11,7 @@
  */
 
 import * as stationService from '../services/stationService.js';
+import * as availabilityService from '../services/availabilityService.js';
 
 // Regex to validate 8-4-4-4-12 hex UUID format
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -160,6 +161,44 @@ export async function getNearbyStations(req, res, next) {
       },
     });
   } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/stations/:id/availability
+ * Change operational availability of a charging station, EVSE, or connector.
+ */
+export async function changeAvailabilityHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!id || !UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'The requested station ID must be a valid UUID.',
+        },
+      });
+    }
+
+    const result = await availabilityService.changeAvailability(id, req.body || {});
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: {
+          code: err.code || 'AVAILABILITY_ERROR',
+          message: err.message,
+        },
+      });
+    }
     next(err);
   }
 }

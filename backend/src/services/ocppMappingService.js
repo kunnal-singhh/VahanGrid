@@ -287,3 +287,73 @@ export async function resolveOcppIdentityBySession(sessionId) {
 
   return null;
 }
+
+/**
+ * Resolves a VahanGrid EVSE UUID to its underlying OCPP charge point and EVSE identity (Phase 3D.8D).
+ * Returns null if the EVSE is not mapped to an OCPP charge point.
+ *
+ * @param {string} evseId - VahanGrid EVSE UUID
+ * @returns {Promise<{
+ *   charge_point_id: string,
+ *   ocpp_evse_id: number,
+ *   ocpp_charge_point_uuid: string,
+ *   evse_id: string,
+ *   cp_status?: string,
+ *   registration_status?: string
+ * }|null>}
+ */
+export async function resolveOcppIdentityByEvse(evseId) {
+  if (!evseId || typeof evseId !== 'string') return null;
+
+  const result = await query(
+    `SELECT
+       ocp.charge_point_id,
+       oem.ocpp_evse_id,
+       ocp.id AS ocpp_charge_point_uuid,
+       oem.evse_id,
+       ocp.status AS cp_status,
+       ocp.registration_status
+     FROM ocpp_evse_mappings oem
+     JOIN ocpp_charge_points ocp ON oem.charge_point_id = ocp.id
+     WHERE oem.evse_id = $1`,
+    [evseId]
+  );
+
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+}
+
+/**
+ * Resolves all OCPP charge points associated with a VahanGrid location (station).
+ * Checks direct location_id on ocpp_charge_points as well as indirect mapping
+ * via ocpp_evse_mappings -> evses.location_id.
+ *
+ * @param {string} locationId - VahanGrid location UUID
+ * @returns {Promise<Array<{
+ *   ocpp_charge_point_uuid: string,
+ *   charge_point_id: string,
+ *   cp_status: string,
+ *   registration_status: string,
+ *   location_id: string|null
+ * }>>}
+ */
+export async function resolveChargePointsByLocation(locationId) {
+  if (!locationId || typeof locationId !== 'string') return [];
+
+  const result = await query(
+    `SELECT DISTINCT
+       ocp.id AS ocpp_charge_point_uuid,
+       ocp.charge_point_id,
+       ocp.status AS cp_status,
+       ocp.registration_status,
+       ocp.location_id
+     FROM ocpp_charge_points ocp
+     LEFT JOIN ocpp_evse_mappings oem ON oem.charge_point_id = ocp.id
+     LEFT JOIN evses e ON oem.evse_id = e.id
+     WHERE ocp.location_id = $1 OR e.location_id = $1
+     ORDER BY ocp.charge_point_id ASC`,
+    [locationId]
+  );
+
+  return result.rows;
+}

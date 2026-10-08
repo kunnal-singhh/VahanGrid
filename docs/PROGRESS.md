@@ -25,10 +25,42 @@
 | **Phase 3D.6B**| OCPP TransactionEvent Energy Synchronization                | ✅ Complete | `test_phase3d6b.js` (56/56 passed) |
 | **Phase 3D.7B**| OCPP MeterValues Telemetry & Dual-Tier Storage             | ✅ Complete | `test_phase3d7b.js` (72/72 passed) |
 | **Phase 3D.8B**| OCPP Remote Start/Stop Command Infrastructure               | ✅ Complete | `test_phase3d8b.js` (51/51 passed) |
+| **Phase 3D.8D**| OCPP ChangeAvailability Implementation                      | ✅ Complete | `test_phase3d8d.js` (72/72 passed) |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3D.8D — OCPP ChangeAvailability Implementation
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3d8d.js` (72/72 tests passing)
+- **Regression Suite:** `test_phase3d8b.js` (51/51 passed), `test_phase3d7b.js` (72/72 passed), `test_phase3d6b.js` (56/56 passed), `test_phase3d6a.js` (76/76 passed), `test_phase3d5.js` (79/79 passed), `test_phase3d4b.js` (82/82 passed), `test_phase3d4a.js` (62/62 passed), `test_phase3d3.js` (55/55 passed), `test_phase3d2.js` (47/47 passed)
+- **Compliance Notice:** *"VahanGrid implements OCPP 2.0.1 ChangeAvailability orchestration supporting station-level, EVSE-level, and connector-level availability control via authenticated REST API, maintaining strict state authority wherein PostgreSQL connector status is updated solely through confirmatory incoming StatusNotification frames."*
+
+#### Architectural Design & Implementation:
+1. **Reverse Mappings (`ocppMappingService.js`):**
+   - Added `resolveOcppIdentityByEvse(evseId)`: Resolves VahanGrid EVSE UUID to `{ charge_point_id, ocpp_evse_id, ocpp_charge_point_uuid, evse_id }`.
+   - Added `resolveChargePointsByLocation(locationId)`: Resolves all OCPP charge point cabinets associated with a VahanGrid location (direct `location_id` and indirect via EVSE mappings).
+
+2. **Availability Orchestration Service (`availabilityService.js`):**
+   - Resolves target scope hierarchically:
+     - **Connector-level:** `{ operationalStatus, connector_id }` sends `ChangeAvailability` with `{ operationalStatus, evse: { id: ocpp_evse_id, connectorId: ocpp_connector_id } }`.
+     - **EVSE-level:** `{ operationalStatus, evse_id }` sends `ChangeAvailability` with `{ operationalStatus, evse: { id: ocpp_evse_id } }`.
+     - **Station-level:** `{ operationalStatus }` sends `ChangeAvailability` with `{ operationalStatus }` (omitting `evse` property per OCPP 2.0.1 specification), supporting fan-out across multiple charge points.
+   - Enforces `operationalStatus` enum: strictly `'Operative'` | `'Inoperative'`.
+   - Dispatches outbound CALL via `ocppCallManager.sendCall()` using existing WebSocket infrastructure.
+   - Handles `Accepted`, `Scheduled`, and `Rejected` responses cleanly.
+
+3. **Strict State Authority (StatusNotification as Single Writer):**
+   - ChangeAvailability CALLRESULT (`Accepted`) does **not** pre-emptively update `connectors.status` or `evses.status`.
+   - State authority is preserved: when the charger shifts state, it transmits an autonomous `StatusNotification` which `statusNotificationHandler.js` processes to update PostgreSQL `connectors.status` (`'unavailable'` or `'available'`).
+
+4. **REST API Endpoint (`POST /api/v1/stations/:id/availability`):**
+   - Mounted on `backend/src/routes/stations.js` guarded with `authenticate` middleware.
+   - Validates UUIDs, checks hierarchy ownership, returns standard structured success or error payloads (`INVALID_ID`, `STATION_NOT_FOUND`, `INVALID_OPERATIONAL_STATUS`, `INVALID_CONNECTOR_ID`, `CONNECTOR_NOT_FOUND`, `INVALID_EVSE_ID`, `EVSE_NOT_FOUND`, `NO_OCPP_CHARGE_POINTS`, `STATION_OFFLINE`, `AVAILABILITY_REJECTED`, `STATION_TIMEOUT`).
+
+---
 
 ### Phase 3D.8B — OCPP Remote Start/Stop Command Infrastructure
 - **Status:** Completed

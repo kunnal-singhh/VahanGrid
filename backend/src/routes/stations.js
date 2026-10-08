@@ -9,7 +9,9 @@ import {
   getAllStations,
   getStationById,
   getNearbyStations,
+  changeAvailabilityHandler,
 } from '../controllers/stationController.js';
+import { authenticate } from '../middleware/authenticate.js';
 
 const router = Router();
 
@@ -22,4 +24,8 @@ router.get('/', getAllStations);
 // 3. GET /api/v1/stations/:id
 router.get('/:id', getStationById);
 
+// 4. POST /api/v1/stations/:id/availability (OCPP 2.0.1 ChangeAvailability)
+router.post('/:id/availability', authenticate, changeAvailabilityHandler);
+
 export default router;
+
