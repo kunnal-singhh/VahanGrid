@@ -30,9 +30,106 @@
 | **Phase 3D.10**| OCPP 2.0.1 Smart Charging / Charging Profiles               | ✅ Complete | `test_phase3d10.js` (81/81 passed) |
 | **Phase 3E.1** | Pricing Engine (Tariff Snapshot & Cost Calculation)         | ✅ Complete | `test_phase3e1.js` (50/50 passed)  |
 | **Phase 3E.2** | Immutable CDR Finalization                                  | ✅ Complete | `test_phase3e2.js` (67/67 passed)  |
-| **Phase 3E.3** | Wallet Settlement & CDR Integration                         | ✅ Complete | `test_phase3e3.js` (85/86 passed)  |
+| **Phase 3E.3** | Wallet Settlement & CDR Integration                         | ✅ Complete | `test_phase3e3.js` (86/86 passed)  |
 | **Phase 3E.4** | Wallet Top-Up & Payment Gateway Integration                 | ✅ Complete | `test_phase3e4.js` (63/63 passed)  |
 | **Phase 3F**   | Real-Time Active Charging Telemetry Dashboard               | ✅ Complete | `test_phase3f.js` (50/50 passed)   |
+| **Phase 3G**   | Unified Financial Activity & Wallet Hub                     | ✅ Complete | `test_phase3g.js` (63/63 passed)   |
+
+---
+
+## Detailed Milestone Records
+
+### Phase 3G — Unified Financial Activity & Wallet Hub
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3g.js` (63/63 tests passing)
+- **Frontend Build:** ✅ Zero errors, 1940 modules, gzip 124.62 kB
+- **Regression Suite:** `test_phase3e4.js` (63/63 passed), `test_phase3e3.js` (86/86 passed), `test_phase3e2.js` (67/67 passed), `test_phase3e1.js` (50/50 passed), `test_phase3c4a.js` (44/44 passed), `test_phase3f.js` (50/50 passed), `verify.js` ✅
+- **Commit:** `feat: add unified financial activity hub`
+- **Compliance Notice:** *"VahanGrid Phase 3G delivers a unified, production-grade financial activity and wallet hub connecting EV charging sessions, Charge Detail Records (CDRs), immutable signed wallet ledger debits/credits, and payment gateway top-ups. EV drivers can seamlessly top up their wallet via Razorpay checkout with server-authoritative HMAC-SHA256 signature verification, recover from INSUFFICIENT_FUNDS settlement failures directly inside the CdrReceiptModal with live balance checks and retry actions, audit running balances (balance_before / balance_after) across all ledger transactions, inspect correlated gateway payment orders and statuses, and inspect past charging sessions with differentiated status chips and settlement badges. All financial invariants remain strictly preserved: wallet balances derive exclusively from the signed transaction ledger, no client-supplied amounts or balance mutations are trusted, and zero unnecessary infrastructure (no Redis, Kafka, MQTT, or external ledger engines) was added."*
+
+#### Files Created / Modified:
+1. **`backend/src/services/walletService.js`** *(modified)*
+   - Enriched `getTransactions` query with `wt.cdr_id`, `wt.payment_id`, `wt.balance_before`, `wt.balance_after`, `c.session_id`, `c.location_name`, `c.energy_kwh`, `c.settlement_status AS cdr_settlement_status`, `p.status AS payment_status`, `p.provider_order_id`, and `p.provider_payment_id`.
+   - Preserves ledger signing invariants and pagination.
+
+2. **`backend/src/services/sessionService.js`** *(modified)*
+   - Enriched `getSessionsByUser` query with `cdr.id AS cdr_id`, `cdr.settlement_status`, and `cdr.settlement_failure_reason` via `LEFT JOIN cdrs`.
+   - Eliminates need for N+1 queries from the frontend when rendering session cards with CDR settlement status.
+
+3. **`backend/src/services/cdrService.js`** *(modified)*
+   - Enriched `listCdrsByUser` with `settlement_status`, `settled_at`, `settlement_failure_reason`, and `wallet_transaction_id`.
+
+4. **`backend/src/services/paymentService.js`** *(modified)*
+   - Added `error_code` and `error_description` columns to `listUserPayments` query.
+
+5. **`frontend/src/services/paymentService.js`** *(new)*
+   - Typed client for `POST /api/v1/payments/orders`, `POST /api/v1/payments/verify`, `GET /api/v1/payments`, and `GET /api/v1/payments/:id`.
+
+6. **`frontend/src/services/walletService.js`** *(modified)*
+   - Added `settleCdr(cdrId)` calling `POST /api/v1/cdrs/:id/settle`.
+   - Enriched error message forwarding for `INSUFFICIENT_FUNDS` and other settlement codes.
+
+7. **`frontend/src/components/charging/CdrReceiptModal.jsx`** *(new)*
+   - Shared audit-grade CDR receipt modal.
+   - Itemized pricing breakdown: energy fee, session fee, idle fee, GST, and net total.
+   - Settlement badges (`settled`, `unsettled`, `failed`).
+   - Clear failure explanation for `INSUFFICIENT_FUNDS` showing outstanding amount vs wallet balance.
+   - "Top Up Wallet" button navigating to the top-up checkout.
+   - "Retry Settlement" action with in-flight debounce preventing duplicate requests.
+   - JSON export for expense tracking and reporting.
+
+8. **`frontend/src/components/wallet/TopUpModal.jsx`** *(new)*
+   - Top-up modal with presets (₹200, ₹500, ₹1000, ₹2000) and custom amount input.
+   - Client-side validation against backend constraints (₹10 - ₹50,000 bounds).
+   - Razorpay standard checkout integration with server-side HMAC-SHA256 verification (`POST /payments/verify`).
+   - Friendly fallback when Razorpay SDK script is unavailable in development / testing.
+
+9. **`frontend/src/components/wallet/PaymentList.jsx`** *(new)*
+   - Audit list for payment orders consuming `GET /api/v1/payments`.
+   - Visual status badges: `paid`, `created`, `pending`, `failed`, `cancelled`.
+   - Displays gateway Order ID, Payment ID, amount, and timestamp.
+   - Manual refresh button.
+
+10. **`frontend/src/components/wallet/TransactionList.jsx`** *(modified)*
+    - Filter tabs: All, Charging, Top-Ups.
+    - Displays running balance (`balance_after`), station name, and energy delivered.
+    - Clickable "View Receipt" button launching `CdrReceiptModal` for charging debits.
+
+11. **`frontend/src/components/wallet/QuickTopUp.jsx`** *(modified)*
+    - Replaced obsolete placeholder notice with working top-up trigger.
+
+12. **`frontend/src/pages/Wallet/WalletPage.jsx`** *(modified)*
+    - Sub-tabs for "Ledger Transactions" and "Payment Orders".
+    - Connected `TopUpModal` and `CdrReceiptModal`.
+    - Real-time balance and transaction refresh upon verified payment.
+
+13. **`frontend/src/pages/History/HistoryPage.jsx`** *(modified)*
+    - Integrated shared `CdrReceiptModal`.
+    - Differentiated session status chips (`active`, `completed`, `stopped`, `failed`, `cancelled`).
+    - Settlement badges on session cards (`Paid`, `Unsettled`, `Settlement Failed`).
+    - "Top Up & Retry" settlement guidance with direct navigation to wallet top-up.
+
+14. **`frontend/src/App.jsx`** *(modified)*
+    - Connected `onNavigateToWallet` handler to `HistoryPage`.
+
+15. **`backend/src/scripts/test_phase3g.js`** *(new)*
+    - 63-assertion comprehensive verification suite covering:
+      - Top-up order validation (bounds, currency, unauthenticated rejection)
+      - HMAC signature verification and ledger credit atomicity
+      - Cross-user access and IDOR protections across payments, CDRs, and sessions
+      - Insufficient balance settlement failure (`INSUFFICIENT_FUNDS`)
+      - Wallet top-up followed by successful settlement retry
+      - Idempotent repeated settlement call on already settled CDR
+      - Enriched transaction, session, and CDR schemas
+
+#### Architecture Decisions:
+- **No Schema Migrations Needed:** The PostgreSQL database schema already contained all necessary tables, foreign keys, unique indices (`uq_wallet_txns_cdr_id`, `uq_wallet_txns_payment_id`), and constraints. Clean SQL `LEFT JOIN` queries were sufficient to surface all relationships.
+- **Strict Server Authoritative Payments:** Browser Razorpay callbacks are treated as hints. Actual ledger credits occur exclusively through server-side HMAC verification (`POST /payments/verify`) or verified webhooks.
+- **Running Ledger Balances:** Both `balance_before` and `balance_after` are stored directly in `wallet_transactions` rows at the moment of atomic ledger write, ensuring O(1) auditability without recalculating past sums.
+- **Graceful Gateway Fallback:** If Razorpay CDN (`checkout.js`) is blocked or unavailable, the UI gracefully informs the user without throwing unhandled exceptions.
+
+---
 
 ---
 

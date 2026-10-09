@@ -353,12 +353,16 @@ export async function getActiveSession(userId) {
  */
 export async function getSessionsByUser(userId) {
   const result = await query(
-    `SELECT ${SESSION_LIST_FIELDS}
+    `SELECT ${SESSION_LIST_FIELDS},
+            cdr.id                     AS cdr_id,
+            cdr.settlement_status      AS settlement_status,
+            cdr.settlement_failure_reason AS settlement_failure_reason
      FROM charging_sessions cs
      JOIN connectors cn ON cs.connector_id = cn.id
      JOIN evses e ON cn.evse_id = e.id
      JOIN locations l ON e.location_id = l.id
      LEFT JOIN vehicles v ON cs.vehicle_id = v.id
+     LEFT JOIN cdrs cdr ON cdr.session_id = cs.id
      WHERE cs.user_id = $1
      ORDER BY cs.started_at DESC`,
     [userId]

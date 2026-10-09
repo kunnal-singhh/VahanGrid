@@ -37,17 +37,28 @@ const WALLET_FIELDS = `
   COALESCE(SUM(wt.amount), 0)::float  AS balance
 `;
 
-/** Safe transaction fields returned to the client. */
+/** Safe transaction fields returned to the client (Phase 3G enriched). */
 const TRANSACTION_FIELDS = `
   wt.id,
   wt.wallet_id,
   wt.type,
-  wt.amount::float     AS amount,
+  wt.amount::float           AS amount,
   wt.currency,
   wt.reference_type,
   wt.reference_id,
   wt.description,
-  wt.created_at
+  wt.created_at,
+  wt.cdr_id,
+  wt.payment_id,
+  wt.balance_before::float   AS balance_before,
+  wt.balance_after::float    AS balance_after,
+  c.session_id,
+  c.location_name,
+  c.energy_kwh::float        AS energy_kwh,
+  c.settlement_status        AS cdr_settlement_status,
+  p.status                   AS payment_status,
+  p.provider_order_id,
+  p.provider_payment_id
 `;
 
 // ---------------------------------------------------------------------------
@@ -91,6 +102,8 @@ export async function getTransactions(userId) {
     `SELECT ${TRANSACTION_FIELDS}
      FROM wallet_transactions wt
      JOIN wallets w ON wt.wallet_id = w.id
+     LEFT JOIN cdrs c ON wt.cdr_id = c.id
+     LEFT JOIN payments p ON wt.payment_id = p.id
      WHERE w.user_id = $1
      ORDER BY wt.created_at DESC`,
     [userId]

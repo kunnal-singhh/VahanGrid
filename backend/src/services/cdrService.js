@@ -326,6 +326,10 @@ export async function listCdrsByUser(userId) {
        c.total_amount::float      AS total_amount,
        c.status,
        c.session_status,
+       c.settlement_status,
+       c.settled_at,
+       c.settlement_failure_reason,
+       c.wallet_transaction_id,
        c.created_at
      FROM cdrs c
      WHERE c.user_id = $1

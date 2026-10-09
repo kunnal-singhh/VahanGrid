@@ -9,13 +9,10 @@ import {
   AlertCircle,
   RefreshCw,
   Car,
-  X,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
 } from 'lucide-react';
 import { chargingService } from '../../services/chargingService';
-import { formatCurrency, formatKwh, formatDuration } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
+import CdrReceiptModal from '../../components/charging/CdrReceiptModal';
 
 function formatSessionTimestamp(dateStr) {
   if (!dateStr) return 'N/A';
@@ -42,194 +39,42 @@ function formatSessionDuration(seconds) {
   return `${m}m ${s}s`;
 }
 
-function formatInrAmount(amount) {
-  if (amount == null || isNaN(amount)) return '—';
-  return `\u20B9${Number(amount).toFixed(2)}`;
+function formatSessionStatusChip(status) {
+  switch (status) {
+    case 'active':
+      return {
+        label: 'Active',
+        classes: 'bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse',
+      };
+    case 'completed':
+      return {
+        label: 'Completed',
+        classes: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+      };
+    case 'stopped':
+      return {
+        label: 'Stopped',
+        classes: 'bg-teal-500/15 text-teal-300 border border-teal-500/30',
+      };
+    case 'failed':
+      return {
+        label: 'Failed',
+        classes: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
+      };
+    case 'cancelled':
+      return {
+        label: 'Cancelled',
+        classes: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+      };
+    default:
+      return {
+        label: status ? status.replace(/_/g, ' ') : 'Unknown',
+        classes: 'bg-slate-500/15 text-slate-300 border border-slate-500/30',
+      };
+  }
 }
 
-/**
- * CDR Receipt Modal — displays the authoritative finalized CDR for a session.
- */
-function CdrReceiptModal({ session, cdr, loading, error, onClose }) {
-  const stationName = session.location?.name || session.stationName || 'Charging Station';
-  const cpoName = session.cpo?.name || session.cpoName || 'Network CPO';
-  const vehicleName = session.vehicle
-    ? `${session.vehicle.manufacturer} ${session.vehicle.model}`
-    : session.vehicleName || 'Registered EV';
-  const sessionId = session.id?.slice(0, 8) ?? 'N/A';
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Session CDR Receipt"
-    >
-      <div className="w-full max-w-md glass border border-white/[.12] rounded-3xl overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[.08]">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-              <Receipt className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">Session Receipt</h2>
-              <p className="text-[10px] text-slate-400">#{sessionId}…</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/[.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
-            aria-label="Close receipt"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="px-5 py-4 space-y-4">
-          {/* Session meta */}
-          <div className="space-y-1 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Station</span>
-              <span className="text-slate-200 font-medium">{cpoName} — {stationName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Vehicle</span>
-              <span className="text-slate-200 font-medium">{vehicleName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Started</span>
-              <span className="text-slate-200">{formatSessionTimestamp(session.started_at)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Duration</span>
-              <span className="text-slate-200">{formatSessionDuration(session.duration_seconds || session.durationSeconds)}</span>
-            </div>
-          </div>
-
-          <div className="border-t border-white/[.06]" />
-
-          {loading ? (
-            <div className="text-center py-6 space-y-2">
-              <Loader2 className="w-6 h-6 text-sky-400 animate-spin mx-auto" />
-              <p className="text-xs text-slate-400">Loading CDR record…</p>
-            </div>
-          ) : error ? (
-            <div className="text-center py-6 space-y-2">
-              <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
-              <p className="text-xs text-slate-300">CDR could not be retrieved.</p>
-              <p className="text-[10px] text-slate-500">{error}</p>
-            </div>
-          ) : cdr ? (
-            <>
-              {/* CDR line items */}
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between text-slate-400">
-                  <span>Energy delivered</span>
-                  <span className="text-slate-200 font-medium">
-                    {Number(cdr.total_energy_kwh ?? cdr.energy_kwh ?? session.energy_kwh ?? 0).toFixed(3)} kWh
-                  </span>
-                </div>
-                {cdr.energy_cost != null && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>Energy cost</span>
-                    <span className="text-slate-200">{formatInrAmount(cdr.energy_cost)}</span>
-                  </div>
-                )}
-                {cdr.session_fee != null && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>Session fee</span>
-                    <span className="text-slate-200">{formatInrAmount(cdr.session_fee)}</span>
-                  </div>
-                )}
-                {cdr.time_cost != null && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>Time cost</span>
-                    <span className="text-slate-200">{formatInrAmount(cdr.time_cost)}</span>
-                  </div>
-                )}
-                {cdr.subtotal != null && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>Subtotal</span>
-                    <span className="text-slate-200">{formatInrAmount(cdr.subtotal)}</span>
-                  </div>
-                )}
-                {cdr.tax_amount != null && (
-                  <div className="flex justify-between text-slate-400">
-                    <span>GST ({((Number(cdr.tax_rate ?? 0.18)) * 100).toFixed(0)}%)</span>
-                    <span className="text-slate-200">{formatInrAmount(cdr.tax_amount)}</span>
-                  </div>
-                )}
-                <div className="border-t border-white/[.06] pt-2 flex justify-between font-bold">
-                  <span className="text-white">Total charged</span>
-                  <span className="text-emerald-400 text-sm">
-                    {formatInrAmount(cdr.total_cost ?? cdr.cost_amount ?? session.cost_amount)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Settlement status */}
-              <div className="bg-white/[.03] border border-white/[.06] rounded-xl p-3 space-y-1">
-                <div className="flex items-center gap-2 text-xs">
-                  {cdr.settlement_status === 'settled' || cdr.wallet_settled ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span className="text-emerald-300 font-medium">Wallet settled</span>
-                    </>
-                  ) : cdr.settlement_status === 'failed' ? (
-                    <>
-                      <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                      <span className="text-rose-300 font-medium">Settlement failed — contact support</span>
-                    </>
-                  ) : (
-                    <>
-                      <Loader2 className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
-                      <span className="text-amber-300 font-medium">Settlement pending</span>
-                    </>
-                  )}
-                </div>
-                {cdr.cdr_id && (
-                  <p className="text-[10px] text-slate-500 pl-6 break-all">CDR ID: {cdr.cdr_id}</p>
-                )}
-                <p className="text-[10px] text-slate-500 pl-6">
-                  Source: Immutable PostgreSQL CDR — OCPP 2.0.1 Audited
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-6 space-y-2">
-              <FileText className="w-6 h-6 text-slate-500 mx-auto" />
-              <p className="text-xs text-slate-300">
-                {session.energy_kwh > 0
-                  ? 'CDR is being finalized — check back shortly.'
-                  : 'No billing record available for this session.'}
-              </p>
-              {session.energy_kwh > 0 && (
-                <p className="text-[10px] text-slate-500">
-                  Energy: {Number(session.energy_kwh).toFixed(3)} kWh ·{' '}
-                  {session.cost_amount > 0 ? formatInrAmount(session.cost_amount) : 'Pending'}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-white/[.06]">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 rounded-xl text-xs font-bold text-slate-200 bg-white/[.06] hover:bg-white/[.1] border border-white/[.1] transition-colors cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function HistoryPage() {
+export default function HistoryPage({ onNavigateToWallet }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -353,10 +198,10 @@ export default function HistoryPage() {
             <ShieldCheck className="w-4 h-4 text-teal-300" />
           </div>
           <div className="text-xl font-black font-display text-teal-300 mt-1.5">
-            Phase 3F
+            Phase 3G Active
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
-            OCPP 2.0.1 Audited — Live Telemetry
+            OCPP 2.0.1 Audited — Settlement Linked
           </div>
         </div>
       </div>
@@ -406,7 +251,10 @@ export default function HistoryPage() {
                 : session.vehicleName || 'Registered EV';
               const connectorStandard = session.connector?.standard || session.connectorStandard || 'CCS2';
               const duration = formatSessionDuration(session.duration_seconds || session.durationSeconds);
-              const isActive = session.status === 'active';
+              const chip = formatSessionStatusChip(session.status);
+              const isSettled = session.settlement_status === 'settled';
+              const isFailed = session.settlement_status === 'failed';
+              const isTerminal = session.status === 'completed' || session.status === 'stopped';
 
               return (
                 <div
@@ -418,15 +266,31 @@ export default function HistoryPage() {
                       <span className="text-xs font-extrabold text-white">
                         {cpoName} — {stationName}
                       </span>
+                      {/* Differentiated Session Status Chip */}
                       <span
-                        className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                          isActive
-                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse'
-                            : 'chip-available'
-                        }`}
+                        className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${chip.classes}`}
                       >
-                        {isActive ? 'Active' : 'Completed'}
+                        {chip.label}
                       </span>
+
+                      {/* Settlement Status Chip */}
+                      {isTerminal && (
+                        <span
+                          className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                            isSettled
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : isFailed
+                              ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                              : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                          }`}
+                        >
+                          {isSettled
+                            ? 'Settled'
+                            : isFailed
+                            ? 'Settlement Failed'
+                            : 'Settlement Pending'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-[11px] text-slate-400 flex items-center gap-3 flex-wrap">
@@ -444,10 +308,10 @@ export default function HistoryPage() {
                     <div className="text-right">
                       <div className="text-xs font-semibold text-slate-300">
                         {session.energy_kwh > 0
-                          ? `${session.energy_kwh} kWh`
+                          ? `${Number(session.energy_kwh).toFixed(2)} kWh`
                           : 'Telemetry Pending'}
                       </div>
-                      <div className="text-[10px] text-emerald-400 font-semibold">
+                      <div className="text-[10px] text-emerald-400 font-semibold font-display">
                         {session.cost_amount > 0
                           ? formatCurrency(session.cost_amount)
                           : 'Billing at Finalization'}
@@ -478,6 +342,14 @@ export default function HistoryPage() {
           loading={cdrModal.loading}
           error={cdrModal.error}
           onClose={handleCloseCdrModal}
+          onOpenTopUp={() => {
+            if (onNavigateToWallet) {
+              onNavigateToWallet();
+            }
+          }}
+          onSettlementUpdated={() => {
+            fetchHistory();
+          }}
         />
       )}
     </div>

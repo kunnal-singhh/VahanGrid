@@ -1220,8 +1220,132 @@ Retrieves details of a specific payment order.
 ### `GET /api/v1/payments`
 Lists payment history for the authenticated user, newest first.
 
-- **Authentication:** Required.
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
 - **Pagination:** Supports `limit` (default 50) and `offset` (default 0) query parameters.
+- **Access Control:** User-isolated (enforces `WHERE user_id = $1`).
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "user_id": "b0000001-0000-0000-0000-000000000001",
+      "wallet_id": "w0000001-0000-0000-0000-000000000001",
+      "provider": "razorpay",
+      "provider_order_id": "order_a1b2c3d4e5f6g7h8",
+      "provider_payment_id": "pay_xyz987654321",
+      "amount": 500.0,
+      "currency": "INR",
+      "status": "paid",
+      "wallet_transaction_id": "wt_11112222-3333-4444-5555-666677778888",
+      "error_code": null,
+      "error_description": null,
+      "created_at": "2026-10-08T17:30:00.000Z",
+      "updated_at": "2026-10-08T17:31:00.000Z",
+      "completed_at": "2026-10-08T17:31:00.000Z"
+    }
+  ],
+  "meta": {
+    "count": 1,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+---
+
+## 14. Wallet & Unified Financial Activity API (Phase 3G)
+
+### `GET /api/v1/wallet`
+Retrieves the authenticated user's wallet record with real-time derived balance.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Integrity:** Derived directly from `SUM(amount)` over the append-only `wallet_transactions` ledger.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "w0000001-0000-0000-0000-000000000001",
+    "user_id": "b0000001-0000-0000-0000-000000000001",
+    "balance": 500.0,
+    "currency": "INR",
+    "status": "active",
+    "created_at": "2026-10-08T17:00:00.000Z",
+    "updated_at": "2026-10-08T17:31:00.000Z"
+  }
+}
+```
+
+---
+
+### `GET /api/v1/wallet/transactions`
+Retrieves enriched ledger transaction history for the authenticated user, newest first.
+
+- **Authentication:** Required (`vg_token` cookie or Bearer token).
+- **Pagination:** Supports `limit` (default 50) and `offset` (default 0) query parameters.
+- **Filtering:** Supports `type` query parameter (`topup`, `charging_payment`, `refund`, `cashback`, `adjustment`).
+- **Enrichment:** Includes running balances (`balance_before`, `balance_after`), joined CDR station metadata (`location_name`, `energy_kwh`, `session_id`, `cdr_settlement_status`), and joined payment metadata (`payment_status`, `provider_order_id`, `provider_payment_id`).
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "wt_22223333-4444-5555-6666-777788889999",
+      "wallet_id": "w0000001-0000-0000-0000-000000000001",
+      "type": "charging_payment",
+      "amount": -150.0,
+      "currency": "INR",
+      "description": "Charging session at Koramangala Tech Park Hub (23.75 kWh)",
+      "reference_id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+      "balance_before": 500.0,
+      "balance_after": 350.0,
+      "cdr_id": "c0000001-0000-0000-0000-000000000001",
+      "payment_id": null,
+      "created_at": "2026-10-08T18:00:00.000Z",
+      "session_id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+      "location_name": "Koramangala Tech Park Hub",
+      "energy_kwh": 23.75,
+      "cdr_settlement_status": "settled",
+      "payment_status": null,
+      "provider_order_id": null,
+      "provider_payment_id": null
+    },
+    {
+      "id": "wt_11112222-3333-4444-5555-666677778888",
+      "wallet_id": "w0000001-0000-0000-0000-000000000001",
+      "type": "topup",
+      "amount": 500.0,
+      "currency": "INR",
+      "description": "Top-up via Razorpay (pay_xyz987654321)",
+      "reference_id": null,
+      "balance_before": 0.0,
+      "balance_after": 500.0,
+      "cdr_id": null,
+      "payment_id": "9a1f2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "created_at": "2026-10-08T17:31:00.000Z",
+      "session_id": null,
+      "location_name": null,
+      "energy_kwh": null,
+      "cdr_settlement_status": null,
+      "payment_status": "paid",
+      "provider_order_id": "order_a1b2c3d4e5f6g7h8",
+      "provider_payment_id": "pay_xyz987654321"
+    }
+  ],
+  "meta": {
+    "count": 2,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
 
 
 

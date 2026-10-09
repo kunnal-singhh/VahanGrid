@@ -32,6 +32,7 @@ async function handleResponse(res, fallbackMessage) {
     const err = new Error(message);
     err.status = res.status;
     err.code = json?.error?.code;
+    err.details = json?.error?.details || null;
     throw err;
   }
   return json.data;
@@ -54,7 +55,7 @@ export const walletService = {
 
   /**
    * Retrieves the authenticated user's wallet transactions, ordered newest-first.
-   * Shape: Array<{ id, wallet_id, type, amount, currency, reference_type, reference_id, description, created_at }>
+   * Shape: Array<{ id, wallet_id, type, amount, currency, reference_type, reference_id, description, created_at, cdr_id, payment_id, balance_before, balance_after, location_name, session_id, energy_kwh }>
    * @returns {Promise<Array<object>>}
    */
   async getWalletTransactions() {
@@ -82,5 +83,20 @@ export const walletService = {
   async getBalance() {
     const wallet = await this.getWallet();
     return wallet?.balance ?? 0;
+  },
+
+  /**
+   * Explicitly triggers or retries settlement of a finalized CDR.
+   * @param {string} cdrId - UUID of the CDR
+   * @returns {Promise<object>} Settlement result { settled, already_settled, amount, balance_after, transaction_id }
+   */
+  async settleCdr(cdrId) {
+    if (!cdrId) throw new Error('CDR ID is required for settlement.');
+    const res = await fetch(`${API_BASE_URL}/cdrs/${encodeURIComponent(cdrId)}/settle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+    return handleResponse(res, 'Settlement could not be processed.');
   },
 };

@@ -464,7 +464,7 @@ export default function App() {
             )}
 
             {activePage === 'history' && (
-              <HistoryPage />
+              <HistoryPage onNavigateToWallet={() => handleNavigate('wallet')} />
             )}
 
             {activePage === 'profile' && (

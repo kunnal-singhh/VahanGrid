@@ -602,6 +602,8 @@ export async function listUserPayments(userId, limit = 50, offset = 0) {
             p.currency,
             p.status,
             p.wallet_transaction_id,
+            p.error_code,
+            p.error_description,
             p.created_at,
             p.completed_at
      FROM payments p
