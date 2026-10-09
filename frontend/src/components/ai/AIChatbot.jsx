@@ -25,20 +25,42 @@ export default function AIChatbot({
 
   const handleSend = async (customPrompt) => {
     const queryText = (customPrompt || input).trim();
-    if (!queryText) return;
+    if (!queryText || isTyping) return;
 
-    setMessages((prev) => [...prev, { role: 'user', text: queryText }]);
+    const userMsg = { role: 'user', text: queryText };
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
 
-    const reply = await aiService.queryCopilot({
-      query: queryText,
-      userSoc,
-      vehicle: selectedVehicle,
-    });
+    // Build Gemini-compatible conversation history from existing messages
+    // (exclude the initial bot greeting to keep context tight)
+    const history = messages
+      .slice(1) // skip the opening greeting
+      .map((m) => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.text }],
+      }));
 
-    setMessages((prev) => [...prev, { role: 'bot', text: reply }]);
-    setIsTyping(false);
+    try {
+      const reply = await aiService.queryCopilot({
+        query: queryText,
+        userSoc,
+        vehicle: selectedVehicle,
+        conversationHistory: history,
+      });
+      setMessages((prev) => [...prev, { role: 'bot', text: reply }]);
+    } catch (err) {
+      console.error('[AIChatbot] queryCopilot error:', err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          text: '⚠️ Copilot is temporarily unavailable. Please try again in a moment.',
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   const renderFormattedText = (text) => {
@@ -103,8 +125,8 @@ export default function AIChatbot({
               <h2 className="text-base md:text-lg font-black text-white">
                 VahanGrid Mobility Copilot
               </h2>
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                Phase 1 Preview
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Powered by Gemini
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
