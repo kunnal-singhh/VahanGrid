@@ -1,4 +1,24 @@
+/**
+ * frontend/src/components/map/LiveMap.jsx
+ *
+ * Interactive MapBox GL JS v3 map for VahanGrid.
+ *
+ * Features:
+ *  - Dark / Light style switching via MapBox built-in styles
+ *  - Custom glowing circle markers per station status
+ *  - Hover popups with station info (name, power, price, status)
+ *  - Route polyline with animated dash for the Route Planner
+ *  - Smooth flyTo animation on station selection
+ *  - India bounds restriction
+ */
+
 import { useEffect, useRef } from 'react';
+
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+// MapBox style URIs
+const STYLE_DARK  = 'mapbox://styles/mapbox/navigation-night-v1';
+const STYLE_LIGHT = 'mapbox://styles/mapbox/navigation-day-v1';
 
 const STATUS_COLORS = {
   available: '#10b981', // Emerald
@@ -7,8 +27,8 @@ const STATUS_COLORS = {
   offline:   '#64748b', // Slate
 };
 
-const DEFAULT_DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const DEFAULT_LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+// India bounding box [sw, ne]
+const INDIA_BOUNDS = [[68.0, 6.0], [97.5, 37.5]];
 
 export default function LiveMap({
   stations = [],
@@ -19,200 +39,269 @@ export default function LiveMap({
   theme = 'dark',
   routePath = [],
 }) {
-  const containerRef = useRef(null);
-  const mapRef = useRef(null);
-  const markersRef = useRef(null);
-  const routeLineRef = useRef(null);
+  const containerRef  = useRef(null);
+  const mapRef        = useRef(null);
+  const markersRef    = useRef([]);   // array of mapboxgl.Marker instances
+  const popupsRef     = useRef([]);   // array of open mapboxgl.Popup instances
+  const routeAddedRef = useRef(false);
 
-  // Initialize Map
+  // ── 1. Initialise MapBox map ───────────────────────────────────────────────
   useEffect(() => {
-    if (!window.L || !containerRef.current) return;
+    if (!window.mapboxgl || !containerRef.current) return;
 
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
+    const mapboxgl = window.mapboxgl;
+    mapboxgl.accessToken = MAPBOX_TOKEN;
 
-    const L = window.L;
-    const indiaBounds = L.latLngBounds([6.0, 68.0], [37.5, 97.5]);
-
-    const map = L.map(containerRef.current, {
-      zoomControl: false,
+    const map = new mapboxgl.Map({
+      container: containerRef.current,
+      style: theme === 'light' ? STYLE_LIGHT : STYLE_DARK,
+      center: [79.5, 22.5],   // centre of India
+      zoom: 4.8,
+      maxBounds: [[60.0, 2.0], [100.0, 40.0]], // slightly wider than India for UX
       attributionControl: false,
-      maxBounds: indiaBounds,
-      maxBoundsViscosity: 0.8,
-    }).setView([27.2, 79.5], 6.5);
+    });
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Navigation controls (bottom-right)
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
 
-    const tileUrl =
-      theme === 'light'
-        ? import.meta.env.VITE_CARTO_VOYAGER_URL || DEFAULT_LIGHT_TILES
-        : import.meta.env.VITE_CARTO_DARK_URL || DEFAULT_DARK_TILES;
+    // Attribution (compact)
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-left');
 
-    L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      subdomains: 'abcd',
-    }).addTo(map);
-
-    markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
-    const timer = setTimeout(() => {
-      if (map) map.invalidateSize();
-    }, 120);
+    // Resize fix for dynamic layouts
+    const timer = setTimeout(() => map.resize(), 150);
 
     return () => {
       clearTimeout(timer);
+      // Clean up markers
+      markersRef.current.forEach(m => m.remove());
+      markersRef.current = [];
+      popupsRef.current.forEach(p => p.remove());
+      popupsRef.current = [];
       map.remove();
       mapRef.current = null;
-      markersRef.current = null;
-      routeLineRef.current = null;
+      routeAddedRef.current = false;
     };
-  }, [mapId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapId]); // re-init only if mapId changes
 
-  // Tile layer update on theme toggle
+  // ── 2. Switch theme (style) without full re-init ─────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !window.L) return;
-    const map = mapRef.current;
-    const L = window.L;
-
-    map.eachLayer((layer) => {
-      if (layer instanceof L.TileLayer) {
-        map.removeLayer(layer);
-      }
-    });
-
-    const tileUrl =
-      theme === 'light'
-        ? import.meta.env.VITE_CARTO_VOYAGER_URL || DEFAULT_LIGHT_TILES
-        : import.meta.env.VITE_CARTO_DARK_URL || DEFAULT_DARK_TILES;
-
-    L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      subdomains: 'abcd',
-    }).addTo(map);
+    if (!mapRef.current) return;
+    const style = theme === 'light' ? STYLE_LIGHT : STYLE_DARK;
+    mapRef.current.setStyle(style);
+    // Route layer is lost on style change — reset flag so it gets re-added
+    routeAddedRef.current = false;
   }, [theme]);
 
-  // ResizeObserver for dynamic layout adaptations
+  // ── 3. ResizeObserver ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !containerRef.current) return;
+    if (!containerRef.current) return;
     const observer = new ResizeObserver(() => {
-      if (mapRef.current) {
-        mapRef.current.invalidateSize();
-      }
+      if (mapRef.current) mapRef.current.resize();
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
-  // Update Markers
+  // ── 4. Station markers ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !markersRef.current || !window.L) return;
-    const L = window.L;
-    markersRef.current.clearLayers();
+    if (!mapRef.current || !window.mapboxgl) return;
+    const mapboxgl = window.mapboxgl;
+    const map = mapRef.current;
+
+    // Remove old markers & popups
+    markersRef.current.forEach(m => m.remove());
+    markersRef.current = [];
+    popupsRef.current.forEach(p => p.remove());
+    popupsRef.current = [];
 
     stations.forEach((st) => {
       if (typeof st.lat !== 'number' || typeof st.lng !== 'number') return;
 
-      const color = STATUS_COLORS[st.status] || '#64748b';
+      const color      = STATUS_COLORS[st.status] || '#64748b';
       const isSelected = selectedStation?.id === st.id;
-      const size = isSelected ? 24 : 15;
+      const size       = isSelected ? 22 : 14;
 
-      const icon = L.divIcon({
-        className: 'vahangrid-marker-icon',
-        iconSize: [size + 16, size + 16],
-        iconAnchor: [(size + 16) / 2, (size + 16) / 2],
-        html: `
-          <div style="
-            width: ${size}px;
-            height: ${size}px;
-            background: ${color};
-            border: 2px solid ${isSelected ? '#ffffff' : 'rgba(0,0,0,0.4)'};
-            border-radius: 50%;
-            box-shadow: 0 0 ${isSelected ? 24 : 12}px ${color};
-            transition: all 0.25s ease;
-            cursor: pointer;
-            position: relative;
-            margin: auto;
-          ">
-            ${
-              st.status === 'available'
-                ? `<span style="position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid ${color}; opacity: 0.6; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>`
-                : ''
-            }
+      // Custom HTML marker element
+      const el = document.createElement('div');
+      el.className = 'vg-mapbox-marker';
+      el.style.cssText = `
+        width: ${size}px;
+        height: ${size}px;
+        background: ${color};
+        border: 2px solid ${isSelected ? '#ffffff' : 'rgba(0,0,0,0.35)'};
+        border-radius: 50%;
+        box-shadow: 0 0 ${isSelected ? 20 : 10}px ${color},
+                    0 0 ${isSelected ? 40 : 20}px ${color}55;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        position: relative;
+      `;
+
+      // Pulsing ring for available stations
+      if (st.status === 'available') {
+        const ring = document.createElement('span');
+        ring.style.cssText = `
+          position: absolute;
+          inset: -5px;
+          border-radius: 50%;
+          border: 1.5px solid ${color};
+          opacity: 0.7;
+          animation: vg-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        `;
+        el.appendChild(ring);
+      }
+
+      // Popup with station details
+      const popup = new mapboxgl.Popup({
+        offset: size + 6,
+        closeButton: false,
+        closeOnClick: false,
+        className: 'vg-mapbox-popup',
+      }).setHTML(`
+        <div style="font-family: 'Inter', sans-serif; min-width: 160px; padding: 2px;">
+          <div style="font-weight: 700; font-size: 12px; color: #f8fafc; margin-bottom: 4px; line-height: 1.3;">
+            ${st.name}
           </div>
-        `,
-      });
+          <div style="font-size: 10px; color: #94a3b8; margin-bottom: 3px;">
+            ⚡ ${st.power} kW &nbsp;•&nbsp; ₹${st.price}/kWh
+          </div>
+          <div style="font-size: 10px; font-weight: 700; color: ${color};">
+            ${(st.status || 'unknown').toUpperCase()}
+          </div>
+          <div style="font-size: 9px; color: #38bdf8; margin-top: 5px; font-weight: 600;">
+            Click to view live hub
+          </div>
+        </div>
+      `);
 
-      const marker = L.marker([st.lat, st.lng], { icon });
-      marker.on('click', () => {
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([st.lng, st.lat])
+        .addTo(map);
+
+      // Show popup on hover
+      el.addEventListener('mouseenter', () => popup.setLngLat([st.lng, st.lat]).addTo(map));
+      el.addEventListener('mouseleave', () => popup.remove());
+
+      // Select station on click
+      el.addEventListener('click', () => {
         if (onSelectStation) onSelectStation(st);
       });
 
-      marker.bindTooltip(
-        `
-        <div style="font-weight: 700; font-size: 11px; margin-bottom: 2px;">${st.name}</div>
-        <div style="font-size: 10px; color: #94a3b8;">
-          ⚡ ${st.power} kW • ₹${st.price}/kWh • <span style="color: ${color}; font-weight: 600;">${st.status.toUpperCase()}</span>
-        </div>
-        <div style="font-size: 9px; color: #38bdf8; margin-top: 4px; font-weight: 600;">Click to view live hub telemetry</div>
-        `,
-        {
-          direction: 'top',
-          offset: [0, -size / 2 - 4],
-          className: 'custom-tooltip',
-          permanent: false,
-        }
-      );
-
-      markersRef.current.addLayer(marker);
+      markersRef.current.push(marker);
+      popupsRef.current.push(popup);
     });
   }, [stations, selectedStation, onSelectStation]);
 
-  // Center on selected station
+  // ── 5. Fly to selected station ────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !selectedStation) return;
-    mapRef.current.setView([selectedStation.lat, selectedStation.lng], 12, {
-      animate: true,
-      duration: 0.8,
+    mapRef.current.flyTo({
+      center: [selectedStation.lng, selectedStation.lat],
+      zoom: 13,
+      speed: 1.4,
+      curve: 1.2,
     });
   }, [selectedStation]);
 
-  // Polyline for Route Planner
+  // ── 6. Route polyline ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !window.L) return;
-    const L = window.L;
+    if (!mapRef.current) return;
+    const map = mapRef.current;
 
-    if (routeLineRef.current) {
-      mapRef.current.removeLayer(routeLineRef.current);
-      routeLineRef.current = null;
-    }
+    const addRoute = () => {
+      // Remove previous route layers/source if they exist
+      if (map.getLayer('vg-route-line'))   map.removeLayer('vg-route-line');
+      if (map.getLayer('vg-route-glow'))   map.removeLayer('vg-route-glow');
+      if (map.getSource('vg-route'))       map.removeSource('vg-route');
+      routeAddedRef.current = false;
 
-    if (routeActive && routePath && routePath.length > 0) {
-      mapRef.current.invalidateSize();
+      if (!routeActive || !routePath || routePath.length < 2) return;
 
-      routeLineRef.current = L.polyline(routePath, {
-        color: '#06b6d4',
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '8, 8',
-        lineCap: 'round',
-      }).addTo(mapRef.current);
+      // routePath is [[lat, lng], ...] — MapBox needs [lng, lat]
+      const coordinates = routePath.map(([lat, lng]) => [lng, lat]);
 
-      setTimeout(() => {
-        if (mapRef.current && routeLineRef.current) {
-          mapRef.current.invalidateSize();
-          mapRef.current.fitBounds(routeLineRef.current.getBounds(), { padding: [40, 40] });
-        }
-      }, 150);
+      map.addSource('vg-route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates },
+        },
+      });
+
+      // Glow layer (wider, translucent)
+      map.addLayer({
+        id: 'vg-route-glow',
+        type: 'line',
+        source: 'vg-route',
+        paint: {
+          'line-color': '#06b6d4',
+          'line-width': 10,
+          'line-opacity': 0.25,
+          'line-blur': 4,
+        },
+      });
+
+      // Main animated dashed line
+      map.addLayer({
+        id: 'vg-route-line',
+        type: 'line',
+        source: 'vg-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#06b6d4',
+          'line-width': 4,
+          'line-opacity': 0.9,
+          'line-dasharray': [2, 2],
+        },
+      });
+
+      routeAddedRef.current = true;
+
+      // Fit the viewport to the route
+      const lngs = coordinates.map(c => c[0]);
+      const lats = coordinates.map(c => c[1]);
+      map.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 60, duration: 1200 }
+      );
+    };
+
+    // Wait for style to be loaded before adding layers
+    if (map.isStyleLoaded()) {
+      addRoute();
+    } else {
+      map.once('styledata', addRoute);
     }
   }, [routeActive, routePath]);
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full rounded-2xl overflow-hidden min-h-[350px] relative shadow-inner"
-    />
+    <>
+      {/* Inline animation keyframe for pulsing markers */}
+      <style>{`
+        @keyframes vg-ping {
+          0%   { transform: scale(1);   opacity: 0.8; }
+          70%  { transform: scale(1.9); opacity: 0;   }
+          100% { transform: scale(1.9); opacity: 0;   }
+        }
+        .vg-mapbox-popup .mapboxgl-popup-content {
+          background: rgba(7, 12, 29, 0.92);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 10px;
+          padding: 10px 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+          color: #f8fafc;
+        }
+        .vg-mapbox-popup .mapboxgl-popup-tip { display: none; }
+        .mapboxgl-ctrl-bottom-left { margin-bottom: 4px !important; }
+      `}</style>
+      <div
+        ref={containerRef}
+        className="w-full h-full rounded-2xl overflow-hidden min-h-[350px] relative shadow-inner"
+      />
+    </>
   );
 }
