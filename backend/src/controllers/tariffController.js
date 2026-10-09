@@ -40,7 +40,11 @@ export async function createTariffHandler(req, res, next) {
  */
 export async function listTariffsHandler(req, res, next) {
   try {
-    const tariffs = await tariffService.listTariffs(req.query || {});
+    const filters = { ...(req.query || {}) };
+    if (req.user?.role === 'operator') {
+      filters.cpo_id = req.user.cpo_id;
+    }
+    const tariffs = await tariffService.listTariffs(filters);
     return res.status(200).json({
       success: true,
       data: tariffs,

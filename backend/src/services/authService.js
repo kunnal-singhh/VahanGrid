@@ -9,7 +9,7 @@
  * - Look up a user by ID (for /auth/me).
  *
  * Rules followed here:
- * - Parameterized SQL only — never string-concatenate user input.
+ * - Parameterized SQL only - never string-concatenate user input.
  * - Passwords are hashed with bcryptjs before storage; the raw value is never logged.
  * - password_hash is never returned to callers.
  * - Wallet creation is atomic with user creation (single transaction).
@@ -42,7 +42,7 @@ export async function registerUser({ name, email, phone, password }) {
     const insertUserSQL = `
       INSERT INTO users (name, email, phone, password_hash)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, name, email, phone, created_at, updated_at
+      RETURNING id, name, email, phone, role, cpo_id, created_at, updated_at
     `;
     const userResult = await client.query(insertUserSQL, [
       name,
@@ -103,7 +103,7 @@ export async function registerUser({ name, email, phone, password }) {
  */
 export async function verifyCredentials(email, password) {
   const result = await query(
-    `SELECT id, name, email, phone, password_hash, created_at, updated_at
+    `SELECT id, name, email, phone, role, cpo_id, password_hash, created_at, updated_at
      FROM users
      WHERE email = $1`,
     [email.toLowerCase().trim()]
@@ -126,7 +126,7 @@ export async function verifyCredentials(email, password) {
  */
 export async function getUserById(userId) {
   const result = await query(
-    `SELECT id, name, email, phone, created_at, updated_at
+    `SELECT id, name, email, phone, role, cpo_id, created_at, updated_at
      FROM users
      WHERE id = $1`,
     [userId]

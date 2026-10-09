@@ -11,7 +11,7 @@
 import { query } from '../config/database.js';
 
 /** Fields returned by every user query — password_hash is deliberately excluded. */
-const USER_FIELDS = `id, name, email, phone, created_at, updated_at`;
+const USER_FIELDS = `id, name, email, phone, role, cpo_id, created_at, updated_at`;
 
 /**
  * Fetch a user's safe profile by UUID.

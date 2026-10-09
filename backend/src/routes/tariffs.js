@@ -15,6 +15,7 @@ import {
   deleteTariffHandler,
 } from '../controllers/tariffController.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { requireTariffOperator, requireOperator } from '../middleware/authorize.js';
 
 const router = Router();
 
@@ -26,10 +27,10 @@ router.post('/calculate', calculatePricingHandler);
 router.get('/resolve', resolveTariffHandler);
 
 // CRUD
-router.post('/', createTariffHandler);
-router.get('/', listTariffsHandler);
-router.get('/:id', getTariffByIdHandler);
-router.patch('/:id', updateTariffHandler);
-router.delete('/:id', deleteTariffHandler);
+router.post('/', requireTariffOperator, createTariffHandler);
+router.get('/', requireOperator, listTariffsHandler);
+router.get('/:id', requireTariffOperator, getTariffByIdHandler);
+router.patch('/:id', requireTariffOperator, updateTariffHandler);
+router.delete('/:id', requireTariffOperator, deleteTariffHandler);
 
 export default router;

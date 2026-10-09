@@ -1347,6 +1347,40 @@ Retrieves enriched ledger transaction history for the authenticated user, newest
 }
 ```
 
+## Phase 4A.1: Operator Identity & Authorization Security Policy
 
+All administrative, remote charger control, and tariff management endpoints enforce strict server-side authorization:
 
+### 1. User Roles & Claims
+- `driver`: Default EV driver account. Has access to discovery, roaming charging, personal sessions, and personal wallet. Cannot perform station hardware commands or modify tariffs.
+- `operator`: Charge Point Operator staff (e.g. Tata Power, Statiq). Bound to an authoritative `cpo_id`. Can only inspect and manage hardware, active operations, and tariffs belonging to their own CPO.
+- `admin`: Platform Super Admin with cross-network maintenance access.
+
+### 2. Protected Station Remote Operations
+Mounted at `/api/v1/stations/:id/*` (Requires `authenticate` + `requireStationOperator`):
+- `POST /api/v1/stations/:id/availability` — Remote ChangeAvailability
+- `POST /api/v1/stations/:id/reset` — Remote Soft/Hard Reset
+- `POST /api/v1/stations/:id/unlock-connector` — Remote UnlockConnector
+- `POST /api/v1/stations/:id/trigger-message` — Remote TriggerMessage
+- `POST /api/v1/stations/:id/charging-profiles` — Remote SetChargingProfile
+- `POST /api/v1/stations/:id/clear-charging-profile` — Remote ClearChargingProfile
+- `DELETE /api/v1/stations/:id/charging-profiles` — Remote ClearChargingProfile alias
+
+**Authorization Rules:**
+- Unauthenticated requests: `401 UNAUTHENTICATED`
+- Driver requests: `403 OPERATOR_ROLE_REQUIRED`
+- Operator managing station of another CPO: `403 CPO_ACCESS_DENIED`
+- Operator with unlinked `cpo_id`: `403 OPERATOR_CPO_REQUIRED` (fails closed)
+
+### 3. Protected Tariff Management
+Mounted at `/api/v1/tariffs/*`:
+- `POST /api/v1/tariffs` — Create Tariff (Requires `authenticate` + `requireTariffOperator`)
+  - Server automatically locks `cpo_id` to `req.user.cpo_id`.
+  - If `location_id` is provided, verifies that location belongs to operator's CPO.
+- `GET /api/v1/tariffs` — List Tariffs (Requires `authenticate` + `requireOperator`)
+  - Automatically filters results to `cpo_id = req.user.cpo_id`.
+- `PATCH /api/v1/tariffs/:id` & `DELETE /api/v1/tariffs/:id` (Requires `authenticate` + `requireTariffOperator`)
+  - Verifies target tariff belongs to `req.user.cpo_id`.
+- `GET /api/v1/tariffs/resolve` & `POST /api/v1/tariffs/calculate`
+  - Permitted for authenticated drivers and operators.
 

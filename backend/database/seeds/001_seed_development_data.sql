@@ -30,14 +30,20 @@ VALUES
 ON CONFLICT (short_code) DO NOTHING;
 
 -- 2. USERS
-INSERT INTO users (id, name, email, phone, password_hash)
+INSERT INTO users (id, name, email, phone, password_hash, role, cpo_id)
 VALUES
   -- All seed users have password: Demo@1234
-  ('b0000001-0000-0000-0000-000000000001', 'Priya Sharma', 'priya.sharma@example.com', '+919876543210', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S'),
-  ('b0000001-0000-0000-0000-000000000002', 'Rahul Verma', 'rahul.verma@example.com', '+919812345678', '$2b$10$l/X4ex6vb7qvDCcxy1q93OvIz6ewlxbKaZhpMx4ol/MdfG11BqvYK'),
-  ('b0000001-0000-0000-0000-000000000003', 'Ananya Patel', 'ananya.patel@example.com', '+919823456789', '$2b$10$a0.vSoMeHId9kg/P34mAAeIj1MYsllvyXqSD4DMU7mDIr2r9dtXTu'),
-  ('b0000001-0000-0000-0000-000000000004', 'Vikram Malhotra', 'vikram.malhotra@example.com', '+919834567890', '$2b$10$ibIVPEbheePtbhqKhnu2vOS5TtxM/EOncxp18.slEE6MziuLbsKWW')
-ON CONFLICT (email) DO NOTHING;
+  ('b0000001-0000-0000-0000-000000000001', 'Priya Sharma', 'priya.sharma@example.com', '+919876543210', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S', 'driver', NULL),
+  ('b0000001-0000-0000-0000-000000000002', 'Rahul Verma', 'rahul.verma@example.com', '+919812345678', '$2b$10$l/X4ex6vb7qvDCcxy1q93OvIz6ewlxbKaZhpMx4ol/MdfG11BqvYK', 'driver', NULL),
+  ('b0000001-0000-0000-0000-000000000003', 'Ananya Patel', 'ananya.patel@example.com', '+919823456789', '$2b$10$a0.vSoMeHId9kg/P34mAAeIj1MYsllvyXqSD4DMU7mDIr2r9dtXTu', 'driver', NULL),
+  ('b0000001-0000-0000-0000-000000000004', 'Vikram Malhotra', 'vikram.malhotra@example.com', '+919834567890', '$2b$10$ibIVPEbheePtbhqKhnu2vOS5TtxM/EOncxp18.slEE6MziuLbsKWW', 'driver', NULL),
+  -- Phase 4A.1 Development Operators & Admin (Tata Power, Statiq, Platform Admin)
+  ('b0000001-0000-0000-0000-000000000010', 'Tata Power Operations', 'operator.tata@example.com', '+919811111111', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S', 'operator', 'a0000001-0000-0000-0000-000000000001'),
+  ('b0000001-0000-0000-0000-000000000011', 'Statiq Fleet Manager', 'operator.statiq@example.com', '+919822222222', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S', 'operator', 'a0000001-0000-0000-0000-000000000002'),
+  ('b0000001-0000-0000-0000-000000000012', 'Platform Super Admin', 'admin@vahangrid.com', '+919833333333', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S', 'admin', NULL)
+ON CONFLICT (email) DO UPDATE SET
+  role = EXCLUDED.role,
+  cpo_id = EXCLUDED.cpo_id;
 
 -- 3. VEHICLES (Popular Indian EV models)
 INSERT INTO vehicles (id, user_id, manufacturer, model, variant, battery_capacity_kwh, usable_battery_capacity_kwh, connector_type, max_ac_power_kw, max_dc_power_kw)
@@ -54,7 +60,10 @@ VALUES
   ('d0000001-0000-0000-0000-000000000001', 'b0000001-0000-0000-0000-000000000001', 'INR', 'active'),
   ('d0000001-0000-0000-0000-000000000002', 'b0000001-0000-0000-0000-000000000002', 'INR', 'active'),
   ('d0000001-0000-0000-0000-000000000003', 'b0000001-0000-0000-0000-000000000003', 'INR', 'active'),
-  ('d0000001-0000-0000-0000-000000000004', 'b0000001-0000-0000-0000-000000000004', 'INR', 'active')
+  ('d0000001-0000-0000-0000-000000000004', 'b0000001-0000-0000-0000-000000000004', 'INR', 'active'),
+  ('d0000001-0000-0000-0000-000000000010', 'b0000001-0000-0000-0000-000000000010', 'INR', 'active'),
+  ('d0000001-0000-0000-0000-000000000011', 'b0000001-0000-0000-0000-000000000011', 'INR', 'active'),
+  ('d0000001-0000-0000-0000-000000000012', 'b0000001-0000-0000-0000-000000000012', 'INR', 'active')
 ON CONFLICT (user_id) DO NOTHING;
 
 -- 5. WALLET TRANSACTIONS (Signed ledger: Positive = Credit, Negative = Debit)

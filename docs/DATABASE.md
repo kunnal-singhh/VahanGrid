@@ -280,5 +280,27 @@ Wallet settlement reconciles finalized CDRs against the user's signed ledger wal
    - Authoritative amount created by backend cannot be modified by webhook payloads; amount mismatch triggers `AMOUNT_TAMPERING_DETECTED` and aborts credit.
    - Row-level locking on `payments` and `wallets` ensures atomic execution with 0 race conditions.
 
+## 10. Operator Identity & CPO Association (Phase 4A.1 - Migration `022_add_user_roles_and_cpo_association.sql`)
 
+Adds role-based access control (RBAC) and CPO tenant association to the core `users` table.
+
+1. **`users` Table Extensions:**
+   - `role VARCHAR(20) NOT NULL DEFAULT 'driver'`
+   - `cpo_id UUID REFERENCES cpos(id) ON DELETE SET NULL`
+
+2. **Database-Level Constraints & Indexes:**
+   ```sql
+   ALTER TABLE users
+     ADD CONSTRAINT chk_user_role
+     CHECK (role IN ('driver', 'operator', 'admin'));
+
+   CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role);
+   CREATE INDEX IF NOT EXISTS idx_users_cpo_id ON users(cpo_id);
+   ```
+
+3. **Security Invariants & Tenancy Rules:**
+   - **Safe Defaults:** All existing and newly registered users default to unprivileged `'driver'` status.
+   - **Role Escalation Defense:** Public registration endpoints (`POST /api/v1/auth/register`) and user profile update endpoints (`PATCH /api/v1/users/me`) strictly ignore or reject client-supplied `role` and `cpo_id`.
+   - **Fail-Closed Tenancy:** Operator authorization checks fail closed (`403 OPERATOR_CPO_REQUIRED`) if an operator user is not associated with a valid CPO.
+   - **Cross-Tenant IDOR Protection:** Station remote operations and tariff mutations enforce `station.cpo_id === req.user.cpo_id` or `tariff.cpo_id === req.user.cpo_id`.
 

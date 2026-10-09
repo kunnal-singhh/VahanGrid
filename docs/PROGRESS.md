@@ -816,5 +816,24 @@
   - `test_phase3d6b.js`: 56/56 passing (TransactionEvent energy sync).
   - `npm run verify:db`: 100% schema verification passing.
 
+## Phase 4A.1 — Operator Identity and Authorization Foundation (Completed: October 10, 2026)
 
+- **Database Migration `022_add_user_roles_and_cpo_association.sql`:**
+  - Added `role VARCHAR(20) NOT NULL DEFAULT 'driver'` with `chk_user_role` constraint ('driver', 'operator', 'admin').
+  - Added `cpo_id UUID REFERENCES cpos(id) ON DELETE SET NULL` with performance index.
+  - Preserved 100% of existing user accounts and credentials.
+- **Controlled Development Seed Accounts:**
+  - `operator.tata@example.com` (`role = 'operator'`, `cpo_id = Tata Power`, password `Demo@1234`).
+  - `operator.statiq@example.com` (`role = 'operator'`, `cpo_id = Statiq`, password `Demo@1234`).
+  - `admin@vahangrid.com` (`role = 'admin'`, `cpo_id = NULL`, password `Demo@1234`).
+- **Authorization Middleware (`src/middleware/authorize.js`):**
+  - `requireRole(...allowedRoles)`: General RBAC gate.
+  - `requireOperator`: Requires operator (with valid cpo_id) or admin; fails closed on missing CPO.
+  - `requireStationOperator`: Enforces station tenant ownership (`station.cpo_id === req.user.cpo_id`).
+  - `requireTariffOperator`: Enforces tariff tenant ownership and prevents client-supplied CPO override.
+- **Route Hardening:**
+  - Secured all station remote operations (`availability`, `reset`, `unlock-connector`, `trigger-message`, `charging-profiles`).
+  - Secured all tariff mutations (`POST`, `PATCH`, `DELETE /api/v1/tariffs`) and tariff listing.
+- **Test Suite (`test_phase4a1.js`):**
+  - 54 comprehensive automated tests covering role security, IDOR rejection, fail-closed mechanics, and driver workflow regression invariance. All 54 passed.
 
