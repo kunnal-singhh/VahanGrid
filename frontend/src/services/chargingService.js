@@ -211,6 +211,95 @@ export const chargingService = {
   },
 
   /**
+   * Retrieves historical time-series telemetry curve for a session.
+   *
+   * @param {string} id - UUID of session
+   * @param {object} [options={}] - Fetch options (e.g. signal for AbortController)
+   * @returns {Promise<Array<Object>>} Array of { recorded_at, power_kw, soc_percent, energy_kwh }
+   */
+  async getSessionTelemetry(id, options = {}) {
+    if (!id) return [];
+
+    const res = await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(id)}/telemetry`, {
+      method: 'GET',
+      credentials: 'include',
+      signal: options.signal,
+    });
+
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 401) return [];
+      await handleResponseError(res, 'Failed to retrieve session telemetry.');
+    }
+
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  /**
+   * Retrieves the finalized CDR for a completed or stopped session.
+   *
+   * @param {string} id - UUID of session
+   * @returns {Promise<Object|null>} Finalized CDR object or null
+   */
+  async getSessionCdr(id) {
+    if (!id) return null;
+
+    const res = await fetch(`${API_BASE_URL}/sessions/${encodeURIComponent(id)}/cdr`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 401) return null;
+      await handleResponseError(res, 'Failed to retrieve session CDR.');
+    }
+
+    const json = await res.json();
+    return json.data || null;
+  },
+
+  /**
+   * Calculates deterministic pricing estimate from tariff snapshot and consumption metrics.
+   * Uses standard paisa half-up rounding matching backend pricingService.
+   *
+   * @param {object} tariffSnapshot
+   * @param {object} metrics - { energyKwh, durationSeconds }
+   * @returns {object|null} Itemized estimated pricing or null
+   */
+  calculateEstimatedCost(tariffSnapshot, { energyKwh = 0, durationSeconds = 0 } = {}) {
+    if (!tariffSnapshot) return null;
+
+    const pricePerKwh = Number(tariffSnapshot.price_per_kwh || 0);
+    const sessionFee = Number(tariffSnapshot.session_fee || 0);
+    const pricePerMinute = Number(tariffSnapshot.price_per_minute || 0);
+    const taxRate = Number(tariffSnapshot.tax_rate ?? 0.1800);
+
+    const energy = Math.max(0, Number(energyKwh || 0));
+    const durationSec = Math.max(0, Math.round(Number(durationSeconds || 0)));
+    const durationMin = Math.ceil(durationSec / 60);
+
+    const roundPaisa = (val) => Math.round((Number(val || 0) + Number.EPSILON) * 100) / 100;
+
+    const energyCost = roundPaisa(energy * pricePerKwh);
+    const sessionCost = roundPaisa(sessionFee);
+    const timeCost = roundPaisa(durationMin * pricePerMinute);
+
+    const subtotal = roundPaisa(energyCost + sessionCost + timeCost);
+    const taxAmount = roundPaisa(subtotal * taxRate);
+    const totalCost = roundPaisa(subtotal + taxAmount);
+
+    return {
+      energyCost,
+      sessionCost,
+      timeCost,
+      subtotal,
+      taxAmount,
+      totalCost,
+      currency: tariffSnapshot.currency || 'INR',
+    };
+  },
+
+  /**
    * Backward-compatible alias for startSession.
    */
   async startSession({ connectorId, vehicleId }) {

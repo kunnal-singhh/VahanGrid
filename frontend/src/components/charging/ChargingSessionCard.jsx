@@ -26,6 +26,12 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
     }
   };
 
+  const energyKwh = Number((session.energy_kwh ?? session.energyKwh ?? 0).toFixed(2));
+  const currentSoc = session.end_soc ?? session.currentSoc ?? null;
+  const metricsLabel = energyKwh > 0
+    ? `${energyKwh} kWh delivered${currentSoc !== null ? ` • ${currentSoc}% SoC` : ''}`
+    : 'Awaiting initial meter values';
+
   return (
     <div className="glass rounded-2xl p-4 md:p-5 border border-sky-500/30 bg-gradient-to-r from-sky-500/[.05] via-emerald-500/[.03] to-transparent relative overflow-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -44,7 +50,7 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
               {stationName}
             </h3>
             <p className="text-[11px] text-slate-400">
-              {connectorStandard} ({ratedPower} kW) • {vehicleName} • Waiting for charger telemetry
+              {connectorStandard} ({ratedPower} kW Rated) • {vehicleName} • {metricsLabel}
             </p>
           </div>
         </div>

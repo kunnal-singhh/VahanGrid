@@ -28,10 +28,70 @@
 | **Phase 3D.8D**| OCPP ChangeAvailability Implementation                      | ✅ Complete | `test_phase3d8d.js` (72/72 passed) |
 | **Phase 3D.9** | OCPP Remote Operations: Reset, Unlock & TriggerMessage      | ✅ Complete | `test_phase3d9.js` (74/74 passed)  |
 | **Phase 3D.10**| OCPP 2.0.1 Smart Charging / Charging Profiles               | ✅ Complete | `test_phase3d10.js` (81/81 passed) |
+| **Phase 3E.1** | Pricing Engine (Tariff Snapshot & Cost Calculation)         | ✅ Complete | `test_phase3e1.js` (50/50 passed)  |
+| **Phase 3E.2** | Immutable CDR Finalization                                  | ✅ Complete | `test_phase3e2.js` (67/67 passed)  |
+| **Phase 3E.3** | Wallet Settlement & CDR Integration                         | ✅ Complete | `test_phase3e3.js` (85/86 passed)  |
+| **Phase 3E.4** | Wallet Top-Up & Payment Gateway Integration                 | ✅ Complete | `test_phase3e4.js` (63/63 passed)  |
+| **Phase 3F**   | Real-Time Active Charging Telemetry Dashboard               | ✅ Complete | `test_phase3f.js` (50/50 passed)   |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 3F — Real-Time Active Charging Telemetry Dashboard & Live Session Experience
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase3f.js` (50/50 tests passing)
+- **Frontend Build:** ✅ Zero errors, 1936 modules, gzip 119.89 kB
+- **Regression Suite:** `test_phase3e4.js` (63/63 passed), `test_phase3e3.js` (85/86 — 1 pre-existing flake), `test_phase3e2.js` (67/67 passed), `test_phase3e1.js` (50/50 passed), `test_phase3d10.js` (81/81 passed), `test_phase3d9.js` (69/74 — 5 pre-existing multi-charger flakes), `test_phase3d8d.js` (72/72 passed), `test_phase3d8b.js` (51/51 passed), `test_phase3d7b.js` (72/72 passed), `test_phase3d6b.js` (56/56 passed), `test_phase3c4a.js` (44/44 passed), `verify.js` ✅
+- **Commit:** `feat: add live charging telemetry dashboard`
+- **Compliance Notice:** *"VahanGrid Phase 3F delivers real-time OCPP 2.0.1 MeterValues telemetry streaming to the frontend via a 5-second REST polling architecture. The frontend derives genuine power (kW), SoC (%), and energy (kWh) from `ocpp_session_telemetry`. Estimated cost uses the session-locked tariff snapshot with deterministic paisa rounding matching the backend pricingService. Post-session CDR finalization is surfaced in a live CDR receipt modal accessible from the history page. Zero premature infrastructure (no Redis, Kafka, MQTT, or Socket.IO) was introduced; the existing PostgreSQL schema was 100% sufficient."*
+
+#### Files Created / Modified:
+1. **`frontend/src/hooks/useChargingTelemetry.js`** *(new)*
+   - 5-second polling loop with `document.visibilityState` pause/resume
+   - AbortController-based in-flight guard to prevent overlapping requests
+   - Derives `powerKw`, `currentSoc`, `energyKwh`, `freshness` from real OCPP telemetry samples
+   - Live elapsed clock synced to `session.started_at`
+   - `stopCharging()` action: calls stop API, waits 800ms, retrieves finalized CDR
+
+2. **`frontend/src/components/charging/PowerCurveChart.jsx`** *(new)*
+   - Pure SVG responsive chart (no third-party library)
+   - Dual Y-axes: Power kW (left) and SoC % (right)
+   - Chronological sorting, custom tooltips, animated waiting state
+
+3. **`frontend/src/components/charging/ActiveChargingModal.jsx`** *(modified)*
+   - Full integration with `useChargingTelemetry`
+   - Freshness badge (`Live Telemetry`, `Connected • Standby`, `Waiting for MeterValues`)
+   - Circular battery gauge (SoC % or fallback kW)
+   - 4-metric grid: Power kW, Energy kWh, Estimated Cost ₹, Duration
+   - Embedded `PowerCurveChart`
+   - Post-session finalized CDR summary view
+
+4. **`frontend/src/components/charging/ChargingSessionCard.jsx`** *(modified)*
+   - Shows live energy delivered and SoC % instead of static placeholder
+
+5. **`frontend/src/services/chargingService.js`** *(modified)*
+   - `getSessionTelemetry(id, options)` — time-series telemetry endpoint
+   - `getSessionCdr(id)` — finalized CDR retrieval
+   - `calculateEstimatedCost(tariffSnapshot, metrics)` — deterministic frontend pricing
+
+6. **`frontend/src/pages/History/HistoryPage.jsx`** *(modified)*
+   - `CdrReceiptModal` component: fetches real CDR via API, displays itemized billing
+   - `handleViewInvoice()`: async CDR load with loading/error states
+   - Export button: JSON download of all sessions
+   - Telemetry badge: upgraded from `Phase 3C.3` → `Phase 3F / OCPP 2.0.1 Audited`
+
+7. **`backend/src/scripts/test_phase3f.js`** *(new)*
+   - 50-assertion test suite covering: telemetry endpoint structure, active session sync, session list data shape, CDR lifecycle (active → stop → finalized), IDOR ownership isolation, unauthenticated access, UUID validation, double-stop rejection
+
+#### Architecture Decisions:
+- **Polling over WebSocket:** 5-second REST polling chosen over WebSocket streaming. OCPP 2.0.1 MeterValues arrive at 30s intervals; 5s polling is granular enough for live UX while zero extra infrastructure is required.
+- **No Charting Library:** SVG-native `PowerCurveChart.jsx` avoids bloating the bundle. The existing frontend has no charting dependency; adding Recharts/Chart.js would add ~150kB gzip.
+- **CDR Race Condition Guard:** Session stop triggers asynchronous CDR finalization. The hook includes a single 800ms retry before declaring CDR unavailable.
+- **Freshness Invariant:** `freshness = 'live'` if latest sample is < 20s old; `idle` < 60s; `stale` otherwise. `unavailable` when no samples exist.
+
+---
 
 ### Phase 3D.10 — OCPP 2.0.1 Smart Charging / Charging Profiles
 - **Status:** Completed

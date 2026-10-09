@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Clock,
   Zap,
-  Leaf,
   Download,
   Receipt,
   ShieldCheck,
   Loader2,
   AlertCircle,
   RefreshCw,
-  Car
+  Car,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import { chargingService } from '../../services/chargingService';
 import { formatCurrency, formatKwh, formatDuration } from '../../utils/formatters';
@@ -39,10 +42,200 @@ function formatSessionDuration(seconds) {
   return `${m}m ${s}s`;
 }
 
+function formatInrAmount(amount) {
+  if (amount == null || isNaN(amount)) return '—';
+  return `\u20B9${Number(amount).toFixed(2)}`;
+}
+
+/**
+ * CDR Receipt Modal — displays the authoritative finalized CDR for a session.
+ */
+function CdrReceiptModal({ session, cdr, loading, error, onClose }) {
+  const stationName = session.location?.name || session.stationName || 'Charging Station';
+  const cpoName = session.cpo?.name || session.cpoName || 'Network CPO';
+  const vehicleName = session.vehicle
+    ? `${session.vehicle.manufacturer} ${session.vehicle.model}`
+    : session.vehicleName || 'Registered EV';
+  const sessionId = session.id?.slice(0, 8) ?? 'N/A';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Session CDR Receipt"
+    >
+      <div className="w-full max-w-md glass border border-white/[.12] rounded-3xl overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[.08]">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+              <Receipt className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">Session Receipt</h2>
+              <p className="text-[10px] text-slate-400">#{sessionId}…</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-white/[.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
+            aria-label="Close receipt"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Session meta */}
+          <div className="space-y-1 text-xs text-slate-400">
+            <div className="flex justify-between">
+              <span>Station</span>
+              <span className="text-slate-200 font-medium">{cpoName} — {stationName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Vehicle</span>
+              <span className="text-slate-200 font-medium">{vehicleName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Started</span>
+              <span className="text-slate-200">{formatSessionTimestamp(session.started_at)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Duration</span>
+              <span className="text-slate-200">{formatSessionDuration(session.duration_seconds || session.durationSeconds)}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[.06]" />
+
+          {loading ? (
+            <div className="text-center py-6 space-y-2">
+              <Loader2 className="w-6 h-6 text-sky-400 animate-spin mx-auto" />
+              <p className="text-xs text-slate-400">Loading CDR record…</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-6 space-y-2">
+              <AlertCircle className="w-6 h-6 text-amber-400 mx-auto" />
+              <p className="text-xs text-slate-300">CDR could not be retrieved.</p>
+              <p className="text-[10px] text-slate-500">{error}</p>
+            </div>
+          ) : cdr ? (
+            <>
+              {/* CDR line items */}
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between text-slate-400">
+                  <span>Energy delivered</span>
+                  <span className="text-slate-200 font-medium">
+                    {Number(cdr.total_energy_kwh ?? cdr.energy_kwh ?? session.energy_kwh ?? 0).toFixed(3)} kWh
+                  </span>
+                </div>
+                {cdr.energy_cost != null && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Energy cost</span>
+                    <span className="text-slate-200">{formatInrAmount(cdr.energy_cost)}</span>
+                  </div>
+                )}
+                {cdr.session_fee != null && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Session fee</span>
+                    <span className="text-slate-200">{formatInrAmount(cdr.session_fee)}</span>
+                  </div>
+                )}
+                {cdr.time_cost != null && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Time cost</span>
+                    <span className="text-slate-200">{formatInrAmount(cdr.time_cost)}</span>
+                  </div>
+                )}
+                {cdr.subtotal != null && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Subtotal</span>
+                    <span className="text-slate-200">{formatInrAmount(cdr.subtotal)}</span>
+                  </div>
+                )}
+                {cdr.tax_amount != null && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>GST ({((Number(cdr.tax_rate ?? 0.18)) * 100).toFixed(0)}%)</span>
+                    <span className="text-slate-200">{formatInrAmount(cdr.tax_amount)}</span>
+                  </div>
+                )}
+                <div className="border-t border-white/[.06] pt-2 flex justify-between font-bold">
+                  <span className="text-white">Total charged</span>
+                  <span className="text-emerald-400 text-sm">
+                    {formatInrAmount(cdr.total_cost ?? cdr.cost_amount ?? session.cost_amount)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Settlement status */}
+              <div className="bg-white/[.03] border border-white/[.06] rounded-xl p-3 space-y-1">
+                <div className="flex items-center gap-2 text-xs">
+                  {cdr.settlement_status === 'settled' || cdr.wallet_settled ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span className="text-emerald-300 font-medium">Wallet settled</span>
+                    </>
+                  ) : cdr.settlement_status === 'failed' ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                      <span className="text-rose-300 font-medium">Settlement failed — contact support</span>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
+                      <span className="text-amber-300 font-medium">Settlement pending</span>
+                    </>
+                  )}
+                </div>
+                {cdr.cdr_id && (
+                  <p className="text-[10px] text-slate-500 pl-6 break-all">CDR ID: {cdr.cdr_id}</p>
+                )}
+                <p className="text-[10px] text-slate-500 pl-6">
+                  Source: Immutable PostgreSQL CDR — OCPP 2.0.1 Audited
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-6 space-y-2">
+              <FileText className="w-6 h-6 text-slate-500 mx-auto" />
+              <p className="text-xs text-slate-300">
+                {session.energy_kwh > 0
+                  ? 'CDR is being finalized — check back shortly.'
+                  : 'No billing record available for this session.'}
+              </p>
+              {session.energy_kwh > 0 && (
+                <p className="text-[10px] text-slate-500">
+                  Energy: {Number(session.energy_kwh).toFixed(3)} kWh ·{' '}
+                  {session.cost_amount > 0 ? formatInrAmount(session.cost_amount) : 'Pending'}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-white/[.06]">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl text-xs font-bold text-slate-200 bg-white/[.06] hover:bg-white/[.1] border border-white/[.1] transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HistoryPage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // CDR receipt modal state
+  const [cdrModal, setCdrModal] = useState({ open: false, session: null, cdr: null, loading: false, error: null });
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -66,9 +259,18 @@ export default function HistoryPage() {
   const totalDurationSecs = sessions.reduce((acc, s) => acc + (s.duration_seconds || s.durationSeconds || 0), 0);
   const activeCount = sessions.filter((s) => s.status === 'active').length;
 
-  const handleDownloadInvoice = (session) => {
-    const stName = session.location?.name || session.stationName || 'Station';
-    alert(`📄 CDR record for session at ${stName} (ID: ${session.id.slice(0, 8)}...). Telemetry awaiting Phase 4.`);
+  const handleViewInvoice = async (session) => {
+    setCdrModal({ open: true, session, cdr: null, loading: true, error: null });
+    try {
+      const cdr = await chargingService.getSessionCdr(session.id);
+      setCdrModal((prev) => ({ ...prev, cdr, loading: false }));
+    } catch (err) {
+      setCdrModal((prev) => ({ ...prev, loading: false, error: err.message || 'Failed to load CDR.' }));
+    }
+  };
+
+  const handleCloseCdrModal = () => {
+    setCdrModal({ open: false, session: null, cdr: null, loading: false, error: null });
   };
 
   return (
@@ -100,7 +302,15 @@ export default function HistoryPage() {
           </button>
 
           <button
-            onClick={() => alert('📄 Generating consolidated CDR audit statement.')}
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(sessions, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `vahangrid-cdr-export-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-white/[.06] hover:bg-white/[.1] border border-white/[.1] text-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-sky-400" />
@@ -143,10 +353,10 @@ export default function HistoryPage() {
             <ShieldCheck className="w-4 h-4 text-teal-300" />
           </div>
           <div className="text-xl font-black font-display text-teal-300 mt-1.5">
-            Phase 3C.3
+            Phase 3F
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
-            Awaiting OCPP 2.0.1 MeterValues
+            OCPP 2.0.1 Audited — Live Telemetry
           </div>
         </div>
       </div>
@@ -245,11 +455,12 @@ export default function HistoryPage() {
                     </div>
 
                     <button
-                      onClick={() => handleDownloadInvoice(session)}
+                      onClick={() => handleViewInvoice(session)}
                       className="p-2 rounded-xl bg-white/[.04] hover:bg-white/[.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      title="Download Session Record"
+                      title="View Session CDR Receipt"
+                      aria-label={`View CDR receipt for session at ${stationName}`}
                     >
-                      <Download className="w-4 h-4" />
+                      <Receipt className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -258,6 +469,17 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
+
+      {/* CDR Receipt Modal */}
+      {cdrModal.open && cdrModal.session && (
+        <CdrReceiptModal
+          session={cdrModal.session}
+          cdr={cdrModal.cdr}
+          loading={cdrModal.loading}
+          error={cdrModal.error}
+          onClose={handleCloseCdrModal}
+        />
+      )}
     </div>
   );
 }
