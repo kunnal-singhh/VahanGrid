@@ -32,10 +32,11 @@ ON CONFLICT (short_code) DO NOTHING;
 -- 2. USERS
 INSERT INTO users (id, name, email, phone, password_hash)
 VALUES
-  ('b0000001-0000-0000-0000-000000000001', 'Priya Sharma', 'priya.sharma@example.com', '+919876543210', '$2b$10$future_hash_placeholder_1'),
-  ('b0000001-0000-0000-0000-000000000002', 'Rahul Verma', 'rahul.verma@example.com', '+919812345678', '$2b$10$future_hash_placeholder_2'),
-  ('b0000001-0000-0000-0000-000000000003', 'Ananya Patel', 'ananya.patel@example.com', '+919823456789', '$2b$10$future_hash_placeholder_3'),
-  ('b0000001-0000-0000-0000-000000000004', 'Vikram Malhotra', 'vikram.malhotra@example.com', '+919834567890', '$2b$10$future_hash_placeholder_4')
+  -- All seed users have password: Demo@1234
+  ('b0000001-0000-0000-0000-000000000001', 'Priya Sharma', 'priya.sharma@example.com', '+919876543210', '$2b$10$fStmN8G.SgwA3jIbiV2u6eiwJ8c9lWTxvecl1AsWEKhOVbGTevG9S'),
+  ('b0000001-0000-0000-0000-000000000002', 'Rahul Verma', 'rahul.verma@example.com', '+919812345678', '$2b$10$l/X4ex6vb7qvDCcxy1q93OvIz6ewlxbKaZhpMx4ol/MdfG11BqvYK'),
+  ('b0000001-0000-0000-0000-000000000003', 'Ananya Patel', 'ananya.patel@example.com', '+919823456789', '$2b$10$a0.vSoMeHId9kg/P34mAAeIj1MYsllvyXqSD4DMU7mDIr2r9dtXTu'),
+  ('b0000001-0000-0000-0000-000000000004', 'Vikram Malhotra', 'vikram.malhotra@example.com', '+919834567890', '$2b$10$ibIVPEbheePtbhqKhnu2vOS5TtxM/EOncxp18.slEE6MziuLbsKWW')
 ON CONFLICT (email) DO NOTHING;
 
 -- 3. VEHICLES (Popular Indian EV models)
