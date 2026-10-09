@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Header from './components/layout/Header';
-import Sidebar, { NAV_ITEMS } from './components/layout/Sidebar';
+import Sidebar, { NAV_ITEMS, OPERATOR_NAV_ITEM } from './components/layout/Sidebar';
 import BottomNav from './components/layout/BottomNav';
 import StationDetailsModal from './components/stations/StationDetailsModal';
 import ActiveChargingModal from './components/charging/ActiveChargingModal';
@@ -16,6 +16,7 @@ import ChargingPage from './pages/Charging/ChargingPage';
 import WalletPage from './pages/Wallet/WalletPage';
 import HistoryPage from './pages/History/HistoryPage';
 import ProfilePage from './pages/Profile/ProfilePage';
+import OperatorDashboardPage from './pages/Operator/OperatorDashboardPage';
 import AIChatbot from './components/ai/AIChatbot';
 
 // Services
@@ -381,9 +382,10 @@ export default function App() {
   }
 
   // Find active nav metadata
-  const currentNav = NAV_ITEMS.find((n) => n.id === activePage) || {
+  const allNavItems = [...NAV_ITEMS, OPERATOR_NAV_ITEM];
+  const currentNav = allNavItems.find((n) => n.id === activePage) || {
     id: activePage,
-    label: activePage === 'ai' ? 'Mobility Copilot' : 'VahanGrid',
+    label: activePage === 'ai' ? 'Mobility Copilot' : activePage === 'operator' ? 'Operator Fleet Portal' : 'VahanGrid',
     icon: null,
   };
 
@@ -545,6 +547,13 @@ export default function App() {
                   balance={balance}
                 />
               </div>
+            )}
+
+            {activePage === 'operator' && (
+              <OperatorDashboardPage
+                theme={theme}
+                onNavigate={handleNavigate}
+              />
             )}
           </main>
 

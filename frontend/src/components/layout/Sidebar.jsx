@@ -13,9 +13,12 @@ import {
   Leaf,
   Car,
   LogOut,
-  LogIn
+  LogIn,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+
+export const OPERATOR_NAV_ITEM = { id: 'operator', label: 'Operator Portal', icon: Building2 };
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -138,6 +141,38 @@ export default function Sidebar({
               </button>
             );
           })}
+
+          {/* Operator Fleet Portal Section (Role-Aware) */}
+          {isAuthenticated && (user?.role === 'operator' || user?.role === 'admin') && (
+            <div className="pt-2 mt-2 border-t border-white/[.06]">
+              {(sidebarOpen || mobileDrawerOpen) && (
+                <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Network Operations</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 font-bold border border-sky-500/20">
+                    {user?.role === 'admin' ? 'ADMIN' : 'CPO'}
+                  </span>
+                </div>
+              )}
+              <button
+                key="operator"
+                id="sidebar-nav-operator"
+                onClick={() => {
+                  onNavigate('operator');
+                  if (mobileDrawerOpen) onCloseMobileDrawer();
+                }}
+                className={`nav-item w-full ${activePage === 'operator' ? 'active' : ''} ${
+                  !sidebarOpen && !mobileDrawerOpen ? 'justify-center px-0' : ''
+                }`}
+                title={!sidebarOpen ? 'Operator Portal' : undefined}
+              >
+                <Building2 className="w-[18px] h-[18px] shrink-0 text-sky-400" />
+                {(sidebarOpen || mobileDrawerOpen) && (
+                  <span className="truncate flex-1 text-left font-semibold">Operator Portal</span>
+                )}
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-blink shrink-0" />
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* Active Vehicle Quick Switcher */}

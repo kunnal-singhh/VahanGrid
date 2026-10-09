@@ -11,9 +11,10 @@
     "seed": "node src/scripts/seed.js",
     "verify:db": "node src/scripts/verify.js",
     "test": "node src/scripts/test_phase3g.js",
-    "test:all": "node src/scripts/test_phase3c1.js && node src/scripts/test_phase3c2.js && node src/scripts/test_phase3c3.js && node src/scripts/test_phase3c4a.js && node src/scripts/test_phase3c4b.js && node src/scripts/test_phase3e1.js && node src/scripts/test_phase3e2.js && node src/scripts/test_phase3e3.js && node src/scripts/test_phase3e4.js && node src/scripts/test_phase3f.js && node src/scripts/test_phase3g.js && node src/scripts/test_phase4a1.js && node src/scripts/test_phase4a2.js",
+    "test:all": "node src/scripts/test_phase3c1.js && node src/scripts/test_phase3c2.js && node src/scripts/test_phase3c3.js && node src/scripts/test_phase3c4a.js && node src/scripts/test_phase3c4b.js && node src/scripts/test_phase3e1.js && node src/scripts/test_phase3e2.js && node src/scripts/test_phase3e3.js && node src/scripts/test_phase3e4.js && node src/scripts/test_phase3f.js && node src/scripts/test_phase3g.js && node src/scripts/test_phase4a1.js && node src/scripts/test_phase4a2.js && node src/scripts/test_phase4b.js",
     "test:phase4a1": "node src/scripts/test_phase4a1.js",
-    "test:phase4a2": "node src/scripts/test_phase4a2.js"
+    "test:phase4a2": "node src/scripts/test_phase4a2.js",
+    "test:phase4b": "node src/scripts/test_phase4b.js"
   },
   "engines": {
     "node": ">=18.0.0"
