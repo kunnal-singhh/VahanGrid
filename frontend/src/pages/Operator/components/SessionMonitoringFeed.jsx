@@ -60,6 +60,7 @@ export default function SessionMonitoringFeed({
 
   const getStatusBadge = (sessionStatus) => {
     switch (sessionStatus) {
+      case 'active':
       case 'charging':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -127,10 +128,9 @@ export default function SessionMonitoringFeed({
               }`}
             >
               <option value="all">All Sessions</option>
-              <option value="charging">Charging (Live)</option>
+              <option value="active">Charging (Live)</option>
               <option value="stopped">Stopped</option>
               <option value="completed">Completed</option>
-              <option value="faulted">Faulted</option>
             </select>
           </div>
 

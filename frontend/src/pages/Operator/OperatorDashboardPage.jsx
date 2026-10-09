@@ -24,8 +24,6 @@ const OVERVIEW_PERIODS = [
   { id: '24h', label: '24 Hours' },
   { id: '7d', label: '7 Days' },
   { id: '30d', label: '30 Days' },
-  { id: '90d', label: '90 Days' },
-  { id: 'all', label: 'All Time' },
 ];
 
 const ADMIN_CPO_OPTIONS = [

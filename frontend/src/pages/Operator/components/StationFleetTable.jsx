@@ -105,7 +105,6 @@ export default function StationFleetTable({
               <option value="all">All Statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-              <option value="maintenance">Maintenance</option>
             </select>
           </div>
 
