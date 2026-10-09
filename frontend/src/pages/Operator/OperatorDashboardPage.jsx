@@ -11,15 +11,19 @@ import {
   CheckCircle2,
   Lock,
   LogIn,
-  Home
+  Home,
+  Tag
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { operatorService } from '../../services/operatorService';
+import { tariffService } from '../../services/tariffService';
 import OperatorOverviewCards from './components/OperatorOverviewCards';
 import OperatorAnalyticsChart from './components/OperatorAnalyticsChart';
 import StationFleetTable from './components/StationFleetTable';
 import SessionMonitoringFeed from './components/SessionMonitoringFeed';
 import EditStationModal from './components/EditStationModal';
+import TariffManagementTable from './components/TariffManagementTable';
+import EditTariffModal from './components/EditTariffModal';
 
 const OVERVIEW_PERIODS = [
   { id: '24h', label: '24 Hours' },
@@ -77,8 +81,14 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState(null);
 
+  // Tariff Management State (Phase 4D)
+  const [tariffs, setTariffs] = useState([]);
+  const [loadingTariffs, setLoadingTariffs] = useState(false);
+  const [tariffsError, setTariffsError] = useState(null);
+  const [editingTariff, setEditingTariff] = useState(null); // null, 'new', or tariff object
+
   // Active view tab
-  const [activeSection, setActiveSection] = useState('all'); // 'all' | 'stations' | 'sessions' | 'analytics'
+  const [activeSection, setActiveSection] = useState('all'); // 'all' | 'stations' | 'tariffs' | 'sessions' | 'analytics'
 
   // Polling State (Auto-refresh every 30s)
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -167,13 +177,32 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
     }
   }, [isAuthorized, sessionPage, sessionStatus, activeCpoId]);
 
+  // ── Fetch Tariffs (Phase 4D) ──
+  const fetchTariffs = useCallback(async () => {
+    if (!isAuthorized) return;
+    try {
+      setLoadingTariffs(true);
+      setTariffsError(null);
+      const res = await tariffService.listTariffs({
+        cpo_id: activeCpoId,
+      });
+      setTariffs(res.tariffs || []);
+    } catch (err) {
+      console.error('[OperatorDashboard] Error loading tariffs:', err);
+      setTariffsError(err.message || 'Failed to load tariffs.');
+    } finally {
+      setLoadingTariffs(false);
+    }
+  }, [isAuthorized, activeCpoId]);
+
   // Refresh all sections
   const handleRefreshAll = useCallback(() => {
     fetchOverview();
     fetchAnalytics();
     fetchStations();
     fetchSessions();
-  }, [fetchOverview, fetchAnalytics, fetchStations, fetchSessions]);
+    fetchTariffs();
+  }, [fetchOverview, fetchAnalytics, fetchStations, fetchSessions, fetchTariffs]);
 
   // Initial load on mount or parameter changes
   useEffect(() => {
@@ -191,6 +220,10 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  useEffect(() => {
+    fetchTariffs();
+  }, [fetchTariffs]);
 
   // ── Auto-Refresh Timer with Tab Visibility Pause ──
   useEffect(() => {
@@ -239,6 +272,25 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
     fetchOverview();
     fetchStations();
   }, [fetchOverview, fetchStations]);
+
+  // ── Tariff Handlers (Phase 4D) ──
+  const handleTariffSaved = useCallback((savedTariff) => {
+    // Re-fetch tariffs to update list with server-enriched data
+    fetchTariffs();
+  }, [fetchTariffs]);
+
+  const handleToggleTariffStatus = useCallback(async (tariff) => {
+    try {
+      const updated = await tariffService.updateTariff(tariff.id, {
+        is_active: !tariff.is_active,
+      });
+      setTariffs((prev) =>
+        prev.map((t) => (t.id === tariff.id ? { ...t, ...updated } : t))
+      );
+    } catch (err) {
+      console.error('[OperatorDashboard] Failed to toggle tariff status:', err);
+    }
+  }, []);
 
   // ── Authorization Guard View ──
   if (!isAuthenticated || !isAuthorized) {
@@ -366,13 +418,13 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
 
               <button
                 onClick={handleRefreshAll}
-                disabled={loadingOverview || loadingStations || loadingSessions}
+                disabled={loadingOverview || loadingStations || loadingSessions || loadingTariffs}
                 title="Refresh All Dashboard Telemetry"
                 className="p-2 rounded-xl bg-white/[.04] hover:bg-white/[.1] border border-white/10 text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw
                   className={`w-4 h-4 ${
-                    loadingOverview || loadingStations || loadingSessions ? 'animate-spin text-sky-400' : ''
+                    loadingOverview || loadingStations || loadingSessions || loadingTariffs ? 'animate-spin text-sky-400' : ''
                   }`}
                 />
               </button>
@@ -387,6 +439,7 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           { id: 'all', label: 'Overview & All Sections', icon: Layers },
           { id: 'analytics', label: 'Analytics Charts', icon: BarChart3 },
           { id: 'stations', label: 'Station Fleet', icon: Building2 },
+          { id: 'tariffs', label: 'Tariff Plans', icon: Tag },
           { id: 'sessions', label: 'Session Monitor', icon: Activity },
         ].map(({ id, label, icon: Icon }) => (
           <button
@@ -456,7 +509,21 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
         />
       )}
 
-      {/* ─── Section 4: Session Monitoring Feed ─── */}
+      {/* ─── Section 4: Tariff Plans Management (Phase 4D) ─── */}
+      {(activeSection === 'all' || activeSection === 'tariffs') && (
+        <TariffManagementTable
+          tariffs={tariffs}
+          loading={loadingTariffs}
+          error={tariffsError}
+          onRefresh={fetchTariffs}
+          onOpenCreateTariff={() => setEditingTariff('new')}
+          onEditTariff={(t) => setEditingTariff(t)}
+          onToggleTariffStatus={handleToggleTariffStatus}
+          theme={theme}
+        />
+      )}
+
+      {/* ─── Section 5: Session Monitoring Feed ─── */}
       {(activeSection === 'all' || activeSection === 'sessions') && (
         <SessionMonitoringFeed
           sessions={sessions}
@@ -477,6 +544,17 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           stationId={editingStationId}
           onClose={() => setEditingStationId(null)}
           onStationUpdated={handleStationUpdated}
+          theme={theme}
+        />
+      )}
+
+      {/* ─── Modal: Create/Edit Tariff Plan (Phase 4D) ─── */}
+      {editingTariff && (
+        <EditTariffModal
+          tariff={editingTariff === 'new' ? null : editingTariff}
+          isOpen={true}
+          onClose={() => setEditingTariff(null)}
+          onTariffSaved={handleTariffSaved}
           theme={theme}
         />
       )}

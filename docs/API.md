@@ -1725,5 +1725,111 @@ Attempts to supply any of the following fields return `422 IMMUTABLE_FIELD`:
 }
 ```
 
+---
+
+## 14. Tariff Management
+
+Protected endpoints for operators (`operator`) and administrators (`admin`) to query, create, update, and resolve tariffs.
+
+### `GET /api/v1/tariffs`
+Lists active/inactive tariffs scoped strictly to the operator's CPO. Platform administrators can pass `?cpo_id=` or omit it for platform-wide view.
+
+#### Query Parameters
+- `search` (string, optional) — Case-insensitive filter matching tariff name, station name, or description.
+- `location_id` (UUID, optional) — Filter tariffs scoped to a specific station.
+- `is_active` (boolean, optional) — Filter by active (`true`) or inactive (`false`) status.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "e0000001-0000-0000-0000-000000000001",
+      "name": "Tata Standard EV Tariff",
+      "description": "Default network-wide rate",
+      "cpo_id": "a0000001-0000-0000-0000-000000000001",
+      "location_id": null,
+      "currency": "INR",
+      "price_per_kwh": "15.00",
+      "session_fee": "0.00",
+      "price_per_minute": "0.00",
+      "idle_fee_per_minute": "1.00",
+      "grace_period_minutes": 15,
+      "tax_rate": "0.1800",
+      "is_active": true,
+      "valid_from": "2026-01-01T00:00:00.000Z",
+      "valid_to": null,
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "location_name": null,
+      "cpo_name": "Tata Power EZ Charge"
+    }
+  ],
+  "meta": {
+    "count": 1
+  }
+}
+```
+
+### `POST /api/v1/tariffs`
+Creates a new tariff plan. The `cpo_id` is automatically derived on the server from the authenticated operator's account.
+
+#### Request Body
+- `name` (string, required)
+- `description` (string, optional)
+- `location_id` (UUID, optional, station scope must belong to operator's CPO)
+- `currency` (string, default `INR`)
+- `price_per_kwh` (number, non-negative, default `0.00`)
+- `session_fee` (number, non-negative, default `0.00`)
+- `price_per_minute` (number, non-negative, default `0.00`)
+- `idle_fee_per_minute` (number, non-negative, default `0.00`)
+- `grace_period_minutes` (integer, non-negative, default `15`)
+- `tax_rate` (number, 0.00 to 1.00, default `0.1800`)
+- `is_active` (boolean, default `true`)
+- `valid_from` (ISO 8601 timestamp, default current time)
+- `valid_to` (ISO 8601 timestamp, optional, must be `>= valid_from`)
+
+#### Response `201 Created`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "e0000001-0000-0000-0000-000000000099",
+    "name": "Tata Off-Peak Night Owl",
+    "cpo_id": "a0000001-0000-0000-0000-000000000001",
+    "price_per_kwh": "12.50",
+    "session_fee": "5.00",
+    "is_active": true
+  }
+}
+```
+
+### `PATCH /api/v1/tariffs/:id`
+Updates pricing or metadata for an existing tariff owned by the authenticated operator. Past charging sessions and settled CDRs remain strictly immutable and are never retroactively repriced.
+
+#### Mutable Fields
+`name`, `description`, `location_id`, `currency`, `price_per_kwh`, `session_fee`, `price_per_minute`, `idle_fee_per_minute`, `grace_period_minutes`, `tax_rate`, `is_active`, `valid_from`, `valid_to`.
+
+#### Immutable Fields
+`id`, `cpo_id`, `created_at`, `updated_at` (rejects with `422 IMMUTABLE_FIELD` or `403 CPO_ACCESS_DENIED`).
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "e0000001-0000-0000-0000-000000000099",
+    "price_per_kwh": "13.25",
+    "session_fee": "6.00",
+    "is_active": true,
+    "updated_at": "2026-10-10T03:30:00.000Z"
+  }
+}
+```
+
+### `DELETE /api/v1/tariffs/:id`
+Deactivates or removes a tariff plan owned by the operator.
+
+
 
 

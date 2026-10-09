@@ -344,6 +344,11 @@ export async function listTariffs(filters = {}) {
     conditions.push(`t.is_active = $${values.length}`);
   }
 
+  if (filters.search && typeof filters.search === 'string' && filters.search.trim()) {
+    values.push(`%${filters.search.trim()}%`);
+    conditions.push(`(t.name ILIKE $${values.length} OR l.name ILIKE $${values.length} OR t.description ILIKE $${values.length})`);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await query(
@@ -384,13 +389,61 @@ export async function updateTariff(id, updates = {}) {
     throw err;
   }
 
+  const ALLOWED_UPDATE_FIELDS = new Set([
+    'name', 'description', 'location_id', 'currency', 'price_per_kwh', 'session_fee',
+    'price_per_minute', 'idle_fee_per_minute', 'grace_period_minutes',
+    'tax_rate', 'is_active', 'valid_from', 'valid_to'
+  ]);
+
+  for (const key of Object.keys(updates)) {
+    if (!ALLOWED_UPDATE_FIELDS.has(key)) {
+      const err = new Error(`Unrecognized or immutable field '${key}'.`);
+      err.statusCode = 400;
+      err.code = 'INVALID_FIELD';
+      throw err;
+    }
+  }
+
   validateTariffInput(updates, true);
+
+  // Validate date range against existing timestamps
+  const effFrom = updates.valid_from !== undefined ? updates.valid_from : existing.valid_from;
+  const effTo = updates.valid_to !== undefined ? updates.valid_to : existing.valid_to;
+  if (effFrom && effTo && new Date(effTo) < new Date(effFrom)) {
+    const err = new Error("'valid_to' cannot be earlier than 'valid_from'.");
+    err.statusCode = 400;
+    err.code = 'INVALID_DATE_RANGE';
+    throw err;
+  }
+
+  // Validate location_id if passed
+  if (updates.location_id !== undefined && updates.location_id !== null) {
+    if (!isValidUUID(updates.location_id)) {
+      const err = new Error("Invalid 'location_id' UUID.");
+      err.statusCode = 400;
+      err.code = 'INVALID_LOCATION_ID';
+      throw err;
+    }
+    const locCheck = await query('SELECT id, cpo_id FROM locations WHERE id = $1', [updates.location_id]);
+    if (locCheck.rows.length === 0) {
+      const err = new Error(`Station with ID '${updates.location_id}' was not found.`);
+      err.statusCode = 404;
+      err.code = 'STATION_NOT_FOUND';
+      throw err;
+    }
+    if (existing.cpo_id && locCheck.rows[0].cpo_id !== existing.cpo_id) {
+      const err = new Error('Cannot attach tariff to a station belonging to another CPO.');
+      err.statusCode = 403;
+      err.code = 'CPO_ACCESS_DENIED';
+      throw err;
+    }
+  }
 
   const fields = [];
   const values = [];
 
   const updateable = [
-    'name', 'description', 'currency', 'price_per_kwh', 'session_fee',
+    'name', 'description', 'location_id', 'currency', 'price_per_kwh', 'session_fee',
     'price_per_minute', 'idle_fee_per_minute', 'grace_period_minutes',
     'tax_rate', 'is_active', 'valid_from', 'valid_to'
   ];
@@ -409,15 +462,14 @@ export async function updateTariff(id, updates = {}) {
   fields.push('updated_at = CURRENT_TIMESTAMP');
   values.push(id);
 
-  const result = await query(
+  await query(
     `UPDATE tariffs
      SET ${fields.join(', ')}
-     WHERE id = $${values.length}
-     RETURNING *`,
+     WHERE id = $${values.length}`,
     values
   );
 
-  return result.rows[0];
+  return getTariffById(id);
 }
 
 /**

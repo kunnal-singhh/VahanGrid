@@ -893,4 +893,36 @@
 - **Test Suite (`backend/src/scripts/test_phase4c.js`):**
   - 82 automated integration tests covering route security (401/403), cross-CPO isolation, detail retrieval, metadata patching, immutable rejection, input validation, coordinate pairing, admin policies, and production bundle integrity. 100% passing (82/82).
 
+## Phase 4D — Operator Tariff Management (Completed: October 10, 2026)
+
+- **Backend Tariff Architecture & Services (`backend/src/services/tariffService.js`):**
+  - Extended `listTariffs` with multi-field search filtering (matching name, location name, and description) and multi-tenant scoping.
+  - Enhanced `updateTariff` to support updating station scoping (`location_id`) with strict cross-CPO ownership verification and un-scoping to network-wide defaults.
+  - Enforced server-side validation against `ALLOWED_UPDATE_FIELDS` with `400 INVALID_FIELD` for unrecognized keys.
+  - Validated effective date ranges (`valid_to >= valid_from`) against database records to prevent constraint violations.
+  - Returns enriched records (`getTariffById`) with resolved station and CPO names.
+- **Middleware & Security Hardening (`backend/src/middleware/authorize.js`):**
+  - Enhanced `requireTariffOperator`:
+    - Rejects client-supplied `cpo_id` override attempts on `POST` and `PATCH` with `403 CPO_ACCESS_DENIED`.
+    - Enforces immutability on `id`, `cpo_id`, `created_at`, `updated_at` with `422 IMMUTABLE_FIELD` or `403 CPO_ACCESS_DENIED`.
+    - Validates `location_id` attachment on both creation and mutation, preventing operators from associating tariffs with another CPO's stations.
+- **Financial Immutability & Pricing Invariance:**
+  - Preserved tariff resolution hierarchy (Connector > EVSE > Location > CPO Default > Global).
+  - Maintained complete immutability for past sessions and settled CDRs: historical `tariff_snapshot`, `pricing_breakdown`, and `total_amount` remain strictly unchanged when tariffs are edited or deactivated.
+- **Frontend Tariff Management Client & UI (`frontend/src/`):**
+  - `tariffService.js`: Typed API wrapper for listing, creating, updating, deleting, and resolving tariffs with credentials inclusion.
+  - `TariffManagementTable.jsx`: Rich table displaying active/inactive tariffs, energy rates (₹/kWh), session fees, duration fees, idle fees, grace periods, GST, and station scope badges with search and filtering controls.
+  - `EditTariffModal.jsx`: Modal dialog for creating and updating tariffs with station fleet scoping dropdown, non-retroactivity advisories, real-time client validation, dirty field tracking, and light/dark theme styling.
+  - `OperatorDashboardPage.jsx`: Integrated "Tariff Plans" tab, manual/auto-refresh telemetry synchronization, and quick activation status toggling.
+- **Integration Test Suite (`backend/src/scripts/test_phase4d.js`):**
+  - 58 automated tests covering route security (401/403), cross-CPO multi-tenant isolation, server CPO derivation, station fleet scoping, server-side input validation, immutable field rejection, tariff lifecycle, resolution hierarchy, historical snapshot invariance, super admin governance, and frontend bundle integrity. 100% passing (58/58).
+- **Full Regression Verification:**
+  - `test_phase4c.js`: 82/82 passing.
+  - `test_phase4b.js`: 48/48 passing.
+  - `test_phase4a2.js`: 84/84 passing.
+  - `test_phase4a1.js`: 54/54 passing.
+  - `test_phase3g.js`: 63/63 passing.
+  - `test_phase3e2.js`: 67/67 passing.
+  - Frontend production build (`vite build`): Verified 0 errors.
+
 

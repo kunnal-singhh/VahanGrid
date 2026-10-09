@@ -215,6 +215,49 @@ export async function requireTariffOperator(req, res, next) {
     }
 
     if (role === 'admin') {
+      const { id } = req.params;
+      if (id) {
+        if (!UUID_REGEX.test(id)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_ID', message: 'Tariff ID must be a valid UUID.' },
+          });
+        }
+        const tariff = await getTariffById(id);
+        if (!tariff) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'TARIFF_NOT_FOUND', message: `Tariff with ID '${id}' was not found.` },
+          });
+        }
+        if (req.method === 'PATCH' && req.body) {
+          if (req.body.id !== undefined && req.body.id !== id) {
+            return res.status(422).json({
+              success: false,
+              error: { code: 'IMMUTABLE_FIELD', message: "Field 'id' is immutable." },
+            });
+          }
+          if (req.body.cpo_id !== undefined && req.body.cpo_id !== tariff.cpo_id) {
+            return res.status(422).json({
+              success: false,
+              error: { code: 'IMMUTABLE_FIELD', message: "Field 'cpo_id' is immutable." },
+            });
+          }
+          if (req.body.created_at !== undefined) {
+            return res.status(422).json({
+              success: false,
+              error: { code: 'IMMUTABLE_FIELD', message: "Field 'created_at' is immutable." },
+            });
+          }
+          if (req.body.updated_at !== undefined) {
+            return res.status(422).json({
+              success: false,
+              error: { code: 'IMMUTABLE_FIELD', message: "Field 'updated_at' is immutable." },
+            });
+          }
+        }
+        req.tariff = tariff;
+      }
       return next();
     }
 
@@ -304,15 +347,61 @@ export async function requireTariffOperator(req, res, next) {
         });
       }
 
-      // Prevent switching tariff to another CPO on PATCH
-      if (req.body?.cpo_id && req.body.cpo_id !== cpo_id) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'CPO_ACCESS_DENIED',
-            message: 'Access denied. You cannot reassign a tariff to another CPO.',
-          },
-        });
+      if (req.method === 'PATCH' && req.body) {
+        // Prevent switching tariff to another CPO on PATCH
+        if (req.body.cpo_id && req.body.cpo_id !== cpo_id) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'CPO_ACCESS_DENIED',
+              message: 'Access denied. You cannot reassign a tariff to another CPO.',
+            },
+          });
+        }
+
+        // Rejection of immutable fields
+        if (req.body.id !== undefined && req.body.id !== id) {
+          return res.status(422).json({
+            success: false,
+            error: { code: 'IMMUTABLE_FIELD', message: "Field 'id' is immutable." },
+          });
+        }
+        if (req.body.created_at !== undefined) {
+          return res.status(422).json({
+            success: false,
+            error: { code: 'IMMUTABLE_FIELD', message: "Field 'created_at' is immutable." },
+          });
+        }
+        if (req.body.updated_at !== undefined) {
+          return res.status(422).json({
+            success: false,
+            error: { code: 'IMMUTABLE_FIELD', message: "Field 'updated_at' is immutable." },
+          });
+        }
+
+        // Validate location_id on PATCH
+        if (req.body.location_id !== undefined && req.body.location_id !== null) {
+          const loc = await getStationById(req.body.location_id);
+          if (!loc) {
+            return res.status(404).json({
+              success: false,
+              error: {
+                code: 'STATION_NOT_FOUND',
+                message: `Station '${req.body.location_id}' was not found.`,
+              },
+            });
+          }
+          const locCpoId = loc.cpo?.id || loc.cpo_id;
+          if (locCpoId !== cpo_id) {
+            return res.status(403).json({
+              success: false,
+              error: {
+                code: 'CPO_ACCESS_DENIED',
+                message: 'Access denied. You cannot attach tariffs to a station belonging to another CPO.',
+              },
+            });
+          }
+        }
       }
 
       req.tariff = tariff;
