@@ -342,22 +342,31 @@ async function main() {
       [sessionId]
     );
 
-    // Stop session -> finalizes CDR
+    // Stop session -> finalizes CDR asynchronously
     const stopRes = await fetch(`${BASE_URL}/sessions/${sessionId}/stop`, {
       method: 'POST',
       headers: { Cookie: userB.cookies },
     });
     assert('E2. User B stops session (200)', stopRes.status === 200);
 
-    // Fetch the CDR
-    const cdrRes = await fetch(`${BASE_URL}/sessions/${sessionId}/cdr`, {
-      method: 'GET',
-      headers: { Cookie: userB.cookies },
-    });
-    assert('E3. CDR retrieved for session (200)', cdrRes.status === 200);
-    const cdrData = await cdrRes.json();
-    const cdrId = cdrData.data.id;
-    const cdrTotal = Number(cdrData.data.total_amount);
+    // Fetch the CDR (allow up to 1s for asynchronous finalizeCdr)
+    let cdrRes = null;
+    let cdrData = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((r) => setTimeout(r, 100));
+      cdrRes = await fetch(`${BASE_URL}/sessions/${sessionId}/cdr`, {
+        method: 'GET',
+        headers: { Cookie: userB.cookies },
+      });
+      if (cdrRes.status === 200) {
+        cdrData = await cdrRes.json();
+        if (cdrData?.data?.id) break;
+      }
+    }
+
+    assert('E3. CDR retrieved for session (200)', cdrRes?.status === 200 && cdrData?.data?.id != null);
+    const cdrId = cdrData?.data?.id;
+    const cdrTotal = Number(cdrData?.data?.total_amount);
     assert('E3. CDR has authoritative total_amount > 0', cdrTotal > 0);
 
     // In background or auto-settlement, User B has 0 balance, so settlement failed

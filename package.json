@@ -12,7 +12,9 @@
     "build:frontend": "npm run build --prefix frontend",
     "db:migrate": "npm run migrate --prefix backend",
     "db:seed": "npm run seed --prefix backend",
-    "db:verify": "npm run verify:db --prefix backend"
+    "db:verify": "npm run verify:db --prefix backend",
+    "test": "npm run test --prefix backend",
+    "test:all": "npm run test:all --prefix backend"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -9,7 +9,9 @@
     "dev": "node --watch src/server.js",
     "migrate": "node src/scripts/migrate.js",
     "seed": "node src/scripts/seed.js",
-    "verify:db": "node src/scripts/verify.js"
+    "verify:db": "node src/scripts/verify.js",
+    "test": "node src/scripts/test_phase3g.js",
+    "test:all": "node src/scripts/test_phase3c1.js && node src/scripts/test_phase3c2.js && node src/scripts/test_phase3c3.js && node src/scripts/test_phase3c4a.js && node src/scripts/test_phase3c4b.js && node src/scripts/test_phase3e1.js && node src/scripts/test_phase3e2.js && node src/scripts/test_phase3e3.js && node src/scripts/test_phase3e4.js && node src/scripts/test_phase3f.js && node src/scripts/test_phase3g.js"
   },
   "engines": {
     "node": ">=18.0.0"
