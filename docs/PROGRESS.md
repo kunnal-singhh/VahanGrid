@@ -837,3 +837,27 @@
 - **Test Suite (`test_phase4a1.js`):**
   - 54 comprehensive automated tests covering role security, IDOR rejection, fail-closed mechanics, and driver workflow regression invariance. All 54 passed.
 
+## Phase 4A.2 — Operator Dashboard APIs (Completed: October 10, 2026)
+
+- **Dedicated Operator Service & Business Logic (`src/services/operatorService.js`):**
+  - `getOperatorOverview`: Real-time fleet KPI rollup (station count, online/offline status via `connectionRegistry` & hardware state, live connector state distribution, active sessions) combined with authoritative financial totals (`total_revenue_inr`, `settled_revenue_inr`, `unsettled_revenue_inr`, `settlement_rate_percent`) strictly computed from immutable CDR records.
+  - `getOperatorStations`: High-performance single grouped SQL query with `COUNT(DISTINCT ...) FILTER` avoiding N+1 roundtrips. Exposes EVSE and connector tallies, connector availability breakdown, live session counts, and OCPP connection status with pagination.
+  - `getOperatorSessions`: Paginated charging session feed scoped strictly to the operator's CPO. Enforces zero-PII exposure with driver name masking (`Priya S.`), omitting email, phone, and wallet information. Provides linked CDR details and authoritative settlement status.
+  - `getOperatorAnalytics`: Continuous time-series analytics leveraging bounded PostgreSQL `generate_series` for `24h` (hourly), `7d` (daily), and `30d` (daily) periods, with zero-filling for inactive buckets and formatted IST timestamps and display labels.
+- **Operator Controller & Authorization Enforcement (`src/controllers/operatorController.js`):**
+  - Tenant scope resolver (`resolveCpoScope`) locks operator queries strictly to `req.user.cpo_id`. Rejects cross-tenant attempts with `403 CPO_ACCESS_DENIED`.
+  - Platform administrator inspection policy allows `role: admin` to query platform-wide aggregates (`cpo.id = 'all'`) or pass `?cpo_id=` for specific network audits.
+  - Robust query validation: bounds checking on pagination (`page >= 1`, station `limit` 1–50, session `limit` 1–100), reporting periods, and enum statuses.
+- **Operator Routes (`src/routes/operator.js` & `src/routes/index.js`):**
+  - Protected endpoints mounted at `/api/v1/operator/`:
+    - `GET /api/v1/operator/overview`
+    - `GET /api/v1/operator/stations`
+    - `GET /api/v1/operator/sessions`
+    - `GET /api/v1/operator/analytics`
+- **Test Suite (`test_phase4a2.js`):**
+  - 84 automated tests across 9 categories (route security, cross-CPO multi-tenant isolation, overview KPIs, stations pagination, session PII masking, analytics time-series bucket counts, platform admin policy, zero-record CPO resilience, and input validation). 100% passing (84/84).
+- **Regression Verification:**
+  - `test_phase4a1.js`: 54/54 passing.
+  - `test_phase3g.js`: 63/63 passing.
+
+

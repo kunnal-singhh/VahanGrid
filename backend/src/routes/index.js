@@ -20,9 +20,7 @@ import walletRouter   from './wallet.js';
 import tariffsRouter  from './tariffs.js';
 import cdrsRouter     from './cdrs.js';
 import paymentsRouter from './payments.js';
-
-// -- Future imports (uncomment as each phase is implemented) ------------------
-// import chargingRouter from './charging.js';
+import operatorRouter from './operator.js';
 
 const router = Router();
 
@@ -37,8 +35,6 @@ router.use('/wallet',   walletRouter);
 router.use('/tariffs',  tariffsRouter);
 router.use('/cdrs',     cdrsRouter);
 router.use('/payments', paymentsRouter);
-
-// -- Future routes --------------------------------------------------------
-// router.use('/charging', chargingRouter);
+router.use('/operator', operatorRouter);
 
 export default router;

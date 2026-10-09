@@ -1384,3 +1384,222 @@ Mounted at `/api/v1/tariffs/*`:
 - `GET /api/v1/tariffs/resolve` & `POST /api/v1/tariffs/calculate`
   - Permitted for authenticated drivers and operators.
 
+---
+
+## Phase 4A.2: Operator Dashboard APIs (`/api/v1/operator/*`)
+
+Dedicated management and telemetry endpoints for Charge Point Operators (CPOs) and platform administrators.
+
+**Access Policy:**
+- Authentication required (`jwt` cookie or `Authorization: Bearer <token>`).
+- Role required: `operator` (locked strictly to `users.cpo_id`) or `admin` (super-admin cross-network access).
+- Multi-tenant isolation: Operators attempting to supply or query a foreign `cpo_id` receive `403 CPO_ACCESS_DENIED`.
+- Driver access is rejected with `403 OPERATOR_ROLE_REQUIRED`.
+- Driver PII masking: Drivers' names are strictly masked (e.g. `Priya S.`), and email addresses, phone numbers, and wallet identifiers are completely omitted.
+
+---
+
+### `GET /api/v1/operator/overview`
+
+Fleet-level real-time KPI overview and authoritative CDR revenue metrics.
+
+#### Query Parameters
+- `period` (string, optional): Aggregate period for CDR financial metrics. One of `24h`, `7d`, `30d` (default), `90d`, `all`.
+- `cpo_id` (UUID, optional, **admin only**): Scope overview to a specific CPO. If omitted, admins receive platform-wide aggregate (`cpo.id = 'all'`).
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "cpo": {
+      "id": "a0000001-0000-0000-0000-000000000001",
+      "name": "Tata Power EZ Charge",
+      "short_code": "TATA_EZ"
+    },
+    "stations": {
+      "total": 6,
+      "online": 4,
+      "offline": 2
+    },
+    "connectors": {
+      "total": 14,
+      "breakdown": {
+        "available": 8,
+        "occupied": 4,
+        "faulted": 1,
+        "unavailable": 1
+      }
+    },
+    "sessions": {
+      "active_now": 2
+    },
+    "period": "30d",
+    "metrics": {
+      "total_sessions": 38,
+      "total_energy_kwh": 492.5,
+      "total_revenue_inr": 8865.0,
+      "settled_revenue_inr": 8500.0,
+      "unsettled_revenue_inr": 365.0,
+      "settlement_rate_percent": 95.88
+    }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/operator/stations`
+
+Paginated fleet station inventory with live EVSE/connector capacity, OCPP connectivity status, and active charging counts.
+
+#### Query Parameters
+- `page` (integer >= 1, default `1`)
+- `limit` (integer 1–50, default `10`)
+- `status` (string, optional): One of `all` (default), `active`, `inactive`, `maintenance`
+- `search` (string, optional): Substring filter on station name or city
+- `cpo_id` (UUID, optional, **admin only**)
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Connaught Place Fast Hub",
+      "address": "Inner Circle, Connaught Place",
+      "city": "New Delhi",
+      "state": "Delhi",
+      "postal_code": "110001",
+      "coordinates": {
+        "latitude": 28.6315,
+        "longitude": 77.2167
+      },
+      "operational_health": "active",
+      "evse_count": 2,
+      "connector_count": 4,
+      "connectors_breakdown": {
+        "available": 2,
+        "occupied": 1,
+        "faulted": 0,
+        "unavailable": 1
+      },
+      "active_sessions_count": 1,
+      "ocpp": {
+        "is_online": true,
+        "last_heartbeat": "2026-10-09T18:00:00.000Z",
+        "station_charge_point_id": "CP-DEL-001"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total_count": 4,
+    "total_pages": 1
+  }
+}
+```
+
+---
+
+### `GET /api/v1/operator/sessions`
+
+Paginated session feed scoped strictly to the operator's stations with masked driver identity (zero PII exposure) and immutable CDR settlement tracking.
+
+#### Query Parameters
+- `page` (integer >= 1, default `1`)
+- `limit` (integer 1–100, default `20`)
+- `status` (string, optional): One of `all` (default), `charging`, `completed`, `stopped`, `faulted`
+- `station_id` (UUID, optional): Filter sessions for a specific station
+- `cpo_id` (UUID, optional, **admin only**)
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "session_id": "4a761ef2-bb30-4e38-9524-74714bf390f7",
+      "status": "stopped",
+      "started_at": "2026-10-08T17:30:00.000Z",
+      "stopped_at": "2026-10-08T18:00:00.000Z",
+      "total_energy_kwh": 23.75,
+      "total_cost_inr": 150.0,
+      "driver": {
+        "display_name": "Priya S."
+      },
+      "vehicle": {
+        "make": "Tata",
+        "model": "Nexon EV Max"
+      },
+      "station": {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "name": "Koramangala Tech Park Hub",
+        "city": "Bengaluru"
+      },
+      "hardware": {
+        "evse_id": "1",
+        "connector_id": "1",
+        "connector_type": "CCS-2"
+      },
+      "cdr": {
+        "id": "c0000001-0000-0000-0000-000000000001",
+        "settlement_status": "settled",
+        "total_amount": 150.0
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total_count": 1,
+    "total_pages": 1
+  }
+}
+```
+
+---
+
+### `GET /api/v1/operator/analytics`
+
+Continuous time-series analytics powered by bounded PostgreSQL date series generation with gap filling, providing historical trend insights.
+
+#### Query Parameters
+- `period` (string, optional): One of `24h` (24 hourly buckets), `7d` (7 daily buckets, default), `30d` (30 daily buckets)
+- `cpo_id` (UUID, optional, **admin only**)
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "cpo": {
+      "id": "a0000001-0000-0000-0000-000000000001",
+      "name": "Tata Power EZ Charge",
+      "short_code": "TATA_EZ"
+    },
+    "period": "7d",
+    "granularity": "daily",
+    "summary": {
+      "total_sessions": 24,
+      "total_energy_kwh": 312.4,
+      "total_billed_inr": 5623.2,
+      "total_settled_inr": 5400.0
+    },
+    "time_series": [
+      {
+        "timestamp": "2026-10-04T00:00:00.000Z",
+        "label": "04 Oct",
+        "session_count": 4,
+        "energy_kwh": 52.8,
+        "billed_amount_inr": 950.4,
+        "settled_amount_inr": 950.4
+      }
+    ]
+  }
+}
+```
+
+
