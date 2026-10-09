@@ -27,7 +27,27 @@ import { chargingService } from './services/chargingService';
 export default function App() {
   const { user, isAuthenticated, loading } = useAuth();
 
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vahangrid_theme');
+      return saved === 'light' || saved === 'dark' ? saved : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (theme === 'light') {
+        document.documentElement.classList.add('light-theme');
+      } else {
+        document.documentElement.classList.remove('light-theme');
+      }
+      localStorage.setItem('vahangrid_theme', theme);
+    } catch (e) {
+      console.warn('[App] LocalStorage theme error:', e);
+    }
+  }, [theme]);
   const [activePage, setActivePage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -44,6 +64,7 @@ export default function App() {
 
   // Active Charging Session State
   const [activeChargingSession, setActiveChargingSession] = useState(null);
+  const [modalChargingSession, setModalChargingSession] = useState(null);
   const [showChargingModal, setShowChargingModal] = useState(false);
 
   // Route State
@@ -119,14 +140,8 @@ export default function App() {
 
   // Theme Toggle Handler
   const toggleTheme = useCallback(() => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    if (nextTheme === 'light') {
-      document.documentElement.classList.add('light-theme');
-    } else {
-      document.documentElement.classList.remove('light-theme');
-    }
-  }, [theme]);
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   // ── 3. Load Active Charging Session from Real REST API ──
   const [loadingActiveSession, setLoadingActiveSession] = useState(false);
@@ -208,6 +223,7 @@ export default function App() {
 
       const session = await chargingService.startChargingSession(connectorId, vehicleId);
       setActiveChargingSession(session);
+      setModalChargingSession(session);
       setShowChargingModal(true);
       setSelectedStation(null);
 
@@ -224,14 +240,50 @@ export default function App() {
     [isAuthenticated, selectedVehicle, vehicles]
   );
 
+  const handleOpenChargingModal = useCallback(
+    (sessionToOpen) => {
+      const s = sessionToOpen || activeChargingSession || modalChargingSession;
+      if (s) {
+        setModalChargingSession(s);
+        setShowChargingModal(true);
+      }
+    },
+    [activeChargingSession, modalChargingSession]
+  );
+
   const handleStopCharge = useCallback(
-    async (sessionIdToStop) => {
-      const id = sessionIdToStop || activeChargingSession?.id || activeChargingSession?.sessionId;
+    async (sessionIdToStop, isAlreadyStopped = false) => {
+      const id =
+        sessionIdToStop ||
+        activeChargingSession?.id ||
+        activeChargingSession?.sessionId ||
+        modalChargingSession?.id;
       if (!id) return;
 
-      const stoppedSession = await chargingService.stopChargingSession(id);
+      let stoppedSession = null;
+      if (!isAlreadyStopped) {
+        try {
+          stoppedSession = await chargingService.stopChargingSession(id);
+        } catch (err) {
+          // If already stopped (409 / SESSION_ALREADY_STOPPED), treat as successfully stopped
+          if (err?.code !== 'SESSION_ALREADY_STOPPED' && err?.status !== 409) {
+            console.warn('[App] Error stopping session:', err);
+          }
+        }
+      }
+
+      // Immediately clear active state so navbar, header, dashboard, and charging page update
       setActiveChargingSession(null);
-      setShowChargingModal(false);
+
+      // Refresh wallet balance so deduction is immediately reflected
+      try {
+        const wallet = await walletService.getWallet();
+        if (wallet) {
+          setBalance(wallet.balance ?? 0);
+        }
+      } catch (wErr) {
+        console.warn('[App] Could not refresh wallet after stop:', wErr);
+      }
 
       // Refresh station records so connector status updates (charging -> available)
       try {
@@ -241,9 +293,15 @@ export default function App() {
         console.warn('[App] Could not refresh stations after stop:', stErr);
       }
 
+      // If stopped from outside the modal (e.g. from session card on Charging page), close modal
+      if (!isAlreadyStopped) {
+        setShowChargingModal(false);
+        setModalChargingSession(null);
+      }
+
       return stoppedSession;
     },
-    [activeChargingSession]
+    [activeChargingSession, modalChargingSession]
   );
 
   // Reservation Handlers
@@ -330,9 +388,12 @@ export default function App() {
   };
 
   // Compute CO2 aggregate
+  // Note: wallet transactions are loaded inside WalletPage, not at App level.
+  // Use an empty array as the default so this never throws a ReferenceError.
   const co2Total = (
     85.4 +
-    transactions.reduce((acc, t) => acc + (typeof t.kwh === 'number' ? t.kwh : 0) * 0.71, 0)
+    (typeof transactions !== 'undefined' ? transactions : [])
+      .reduce((acc, t) => acc + (typeof t.kwh === 'number' ? t.kwh : 0) * 0.71, 0)
   ).toFixed(1);
 
   return (
@@ -391,7 +452,7 @@ export default function App() {
             isNetworkOnline={isNetworkOnline}
             onToggleNetwork={() => setIsNetworkOnline((v) => !v)}
             activeChargingSession={activeChargingSession}
-            onOpenChargingSession={() => setShowChargingModal(true)}
+            onOpenChargingSession={() => handleOpenChargingModal()}
             onOpenMobileMenu={() => setMobileDrawerOpen(true)}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -412,7 +473,7 @@ export default function App() {
                 userSoc={userSoc}
                 theme={theme}
                 activeChargingSession={activeChargingSession}
-                onOpenChargingSession={() => setShowChargingModal(true)}
+                onOpenChargingSession={() => handleOpenChargingModal()}
               />
             )}
 
@@ -451,7 +512,7 @@ export default function App() {
             {activePage === 'charging' && (
               <ChargingPage
                 activeChargingSession={activeChargingSession}
-                onOpenChargingSession={() => setShowChargingModal(true)}
+                onOpenChargingSession={() => handleOpenChargingModal()}
                 onStopChargingSession={handleStopCharge}
                 stations={stations}
                 onSelectStation={setSelectedStation}
@@ -460,7 +521,7 @@ export default function App() {
             )}
 
             {activePage === 'wallet' && (
-              <WalletPage onBalanceSync={setBalance} />
+              <WalletPage onBalanceSync={setBalance} theme={theme} />
             )}
 
             {activePage === 'history' && (
@@ -512,11 +573,14 @@ export default function App() {
           )}
 
           {/* ─── Global Active Charging Modal ─── */}
-          {showChargingModal && activeChargingSession && (
+          {showChargingModal && (modalChargingSession || activeChargingSession) && (
             <ActiveChargingModal
-              session={activeChargingSession}
+              session={modalChargingSession || activeChargingSession}
               onStop={handleStopCharge}
-              onClose={() => setShowChargingModal(false)}
+              onClose={() => {
+                setShowChargingModal(false);
+                setModalChargingSession(null);
+              }}
             />
           )}
         </div>

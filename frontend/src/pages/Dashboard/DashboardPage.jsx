@@ -76,7 +76,7 @@ export default function DashboardPage({
       </div>
 
       {/* Active Session Spotlight Banner */}
-      {activeChargingSession && (
+      {activeChargingSession && activeChargingSession.status !== 'stopped' && activeChargingSession.status !== 'completed' && (
         <div
           onClick={onOpenChargingSession}
           className="glass rounded-2xl p-4 border border-sky-500/40 bg-gradient-to-r from-sky-500/10 via-emerald-500/10 to-transparent flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-sky-500/60 transition-all shadow-lg shadow-sky-500/10 animate-fade-in"
@@ -100,7 +100,7 @@ export default function DashboardPage({
               </p>
             </div>
           </div>
-          <button className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center gap-1 self-end sm:self-center">
+          <button className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center gap-1 self-end sm:self-center">
             <span>View Session</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
@@ -266,7 +266,7 @@ export default function DashboardPage({
 
             <button
               onClick={() => onNavigate('ai')}
-              className="w-full py-2 rounded-xl text-xs font-semibold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full py-2 rounded-xl text-xs font-semibold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>Ask Mobility Copilot</span>
               <ArrowRight className="w-3.5 h-3.5" />

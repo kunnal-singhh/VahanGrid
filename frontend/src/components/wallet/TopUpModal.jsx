@@ -239,7 +239,7 @@ export default function TopUpModal({ initialAmount = 500, onClose, onSuccess }) 
                         onClick={() => handleSelectPreset(amt)}
                         className={`py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-sky-500/20 border-sky-500/50 text-sky-300 shadow-md shadow-sky-500/10'
+                            ? 'bg-sky-500/20 border-sky-500/50 text-sky-400 shadow-md shadow-sky-500/10'
                             : 'bg-white/[.02] border-white/[.08] text-slate-300 hover:bg-white/[.05]'
                         }`}
                       >
@@ -280,7 +280,7 @@ export default function TopUpModal({ initialAmount = 500, onClose, onSuccess }) 
 
               {/* Error Alert */}
               {errorMessage && (
-                <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl flex items-start gap-2 text-xs text-rose-300">
+                <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl flex items-start gap-2 text-xs text-rose-400">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{errorMessage}</span>
                 </div>
@@ -288,7 +288,7 @@ export default function TopUpModal({ initialAmount = 500, onClose, onSuccess }) 
 
               {/* Gateway Notice if script unavailable */}
               {gatewayNotice && (
-                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-200">
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-start gap-2 text-xs text-amber-400">
                   <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                   <span>{gatewayNotice}</span>
                 </div>

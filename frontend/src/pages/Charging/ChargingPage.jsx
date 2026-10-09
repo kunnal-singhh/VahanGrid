@@ -40,7 +40,7 @@ export default function ChargingPage({
           <Loader2 className="w-6 h-6 animate-spin text-sky-400 mx-auto" />
           <p className="text-xs text-slate-400">Checking charging session...</p>
         </div>
-      ) : activeChargingSession ? (
+      ) : activeChargingSession && activeChargingSession.status !== 'stopped' && activeChargingSession.status !== 'completed' ? (
         <div className="space-y-3">
           <h2 className="text-xs font-bold text-sky-400 uppercase tracking-wider">
             Current Ongoing Session
@@ -64,7 +64,7 @@ export default function ChargingPage({
       )}
 
       {/* Quick Launch Charging Stations */}
-      {!activeChargingSession && (
+      {(!activeChargingSession || activeChargingSession.status === 'stopped' || activeChargingSession.status === 'completed') && (
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <h2 className="text-xs font-bold text-white uppercase tracking-wider">

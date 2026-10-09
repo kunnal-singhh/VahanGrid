@@ -64,10 +64,10 @@ export default function Header({
         </div>
 
         {/* Active Charging Session Floating Pill */}
-        {activeChargingSession && (
+        {activeChargingSession && activeChargingSession.status !== 'stopped' && activeChargingSession.status !== 'completed' && (
           <button
             onClick={onOpenChargingSession}
-            className="ml-2 flex items-center gap-1.5 bg-gradient-to-r from-sky-500/15 to-emerald-500/15 border border-sky-500/30 text-sky-300 px-3 py-1 rounded-full text-[11px] font-semibold hover:border-sky-500/50 transition-all cursor-pointer animate-pulse"
+            className="ml-2 flex items-center gap-1.5 bg-gradient-to-r from-sky-500/15 to-emerald-500/15 border border-sky-500/30 text-sky-400 px-3 py-1 rounded-full text-[11px] font-semibold hover:border-sky-500/50 transition-all cursor-pointer animate-pulse shrink-0"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-blink" />
             <span className="hidden sm:inline">Charging:</span>
@@ -77,7 +77,7 @@ export default function Header({
       </div>
 
       {/* Right: Search, Network Status, Theme, Profile */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 md:gap-2.5 shrink-0">
         {/* Optional Search Bar */}
         {showSearch && (
           <div className="hidden sm:flex items-center bg-white/[.04] border border-white/[.08] rounded-xl px-3 py-1.5 focus-within:border-sky-500/40 transition-all">
@@ -90,7 +90,7 @@ export default function Header({
               className="bg-transparent text-xs text-white placeholder-slate-500 outline-none w-36 md:w-48"
             />
             {searchQuery && (
-              <button onClick={() => onSearchChange('')} className="text-slate-400 hover:text-white">
+              <button onClick={() => onSearchChange('')} className="text-slate-400 hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             )}

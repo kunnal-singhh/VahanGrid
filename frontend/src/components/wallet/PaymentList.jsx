@@ -28,15 +28,15 @@ function formatPaymentStatus(status) {
     case 'paid':
       return { label: 'Paid & Credited', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
     case 'created':
-      return { label: 'Order Created', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' };
+      return { label: 'Order Created', color: 'bg-sky-500/15 text-sky-400 border-sky-500/30' };
     case 'pending':
-      return { label: 'Pending Gateway', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' };
+      return { label: 'Pending Gateway', color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
     case 'failed':
-      return { label: 'Payment Failed', color: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
+      return { label: 'Payment Failed', color: 'bg-rose-500/15 text-rose-400 border-rose-500/30' };
     case 'cancelled':
-      return { label: 'Cancelled', color: 'bg-slate-500/15 text-slate-300 border-slate-500/30' };
+      return { label: 'Cancelled', color: 'bg-slate-500/15 text-slate-500 border-slate-500/30' };
     default:
-      return { label: status || 'Unknown', color: 'bg-white/[.05] text-slate-300 border-white/[.1]' };
+      return { label: status || 'Unknown', color: 'bg-white/[.05] text-slate-500 border-white/[.1]' };
   }
 }
 
@@ -79,7 +79,7 @@ export default function PaymentList({ onRefreshParent }) {
         <button
           onClick={handleRefresh}
           disabled={loading}
-          className="text-xs font-semibold text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer disabled:opacity-50"
+          className="text-xs font-semibold text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>

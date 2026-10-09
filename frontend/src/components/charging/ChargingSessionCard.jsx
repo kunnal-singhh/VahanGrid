@@ -6,6 +6,10 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
 
   if (!session) return null;
 
+  const currentStatus = session.status || 'active';
+  const isTerminal =
+    currentStatus === 'completed' || currentStatus === 'stopped' || currentStatus === 'failed';
+
   const stationName = session.location?.name || session.stationName || 'Charging Station';
   const vehicleName = session.vehicle
     ? `${session.vehicle.manufacturer} ${session.vehicle.model}`
@@ -15,7 +19,7 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
 
   const handleStop = async (e) => {
     e.stopPropagation();
-    if (!onStop || isStopping) return;
+    if (!onStop || isStopping || isTerminal) return;
     try {
       setIsStopping(true);
       await onStop(session.id || session.sessionId);
@@ -28,7 +32,9 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
 
   const energyKwh = Number((session.energy_kwh ?? session.energyKwh ?? 0).toFixed(2));
   const currentSoc = session.end_soc ?? session.currentSoc ?? null;
-  const metricsLabel = energyKwh > 0
+  const metricsLabel = isTerminal
+    ? `Completed • ${energyKwh} kWh delivered`
+    : energyKwh > 0
     ? `${energyKwh} kWh delivered${currentSoc !== null ? ` • ${currentSoc}% SoC` : ''}`
     : 'Awaiting initial meter values';
 
@@ -37,14 +43,16 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
-            <Zap className="w-5 h-5 animate-pulse fill-sky-400" />
+            <Zap className={`w-5 h-5 ${isTerminal ? 'text-emerald-400' : 'animate-pulse fill-sky-400'}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
-                Session Active
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${isTerminal ? 'text-emerald-400' : 'text-sky-400'}`}>
+                {isTerminal ? 'Session Completed' : 'Session Active'}
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-blink" />
+              {!isTerminal && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-blink" />
+              )}
             </div>
             <h3 className="text-sm font-bold text-white truncate max-w-[280px]">
               {stationName}
@@ -60,27 +68,29 @@ export default function ChargingSessionCard({ session, onOpenDetail, onStop }) {
             onClick={onOpenDetail}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/[.06] hover:bg-white/[.1] border border-white/[.08] text-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
-            <span>View Gauge</span>
+            <span>{isTerminal ? 'View Receipt' : 'View Gauge'}</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
 
-          <button
-            onClick={handleStop}
-            disabled={isStopping}
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isStopping ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Stopping...</span>
-              </>
-            ) : (
-              <>
-                <StopCircle className="w-3.5 h-3.5" />
-                <span>Stop</span>
-              </>
-            )}
-          </button>
+          {!isTerminal && onStop && (
+            <button
+              onClick={handleStop}
+              disabled={isStopping}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isStopping ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Stopping...</span>
+                </>
+              ) : (
+                <>
+                  <StopCircle className="w-3.5 h-3.5" />
+                  <span>Stop</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

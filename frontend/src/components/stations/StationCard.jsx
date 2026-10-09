@@ -41,7 +41,7 @@ export default function StationCard({ station, onSelect, isSelected = false }) {
           </span>
         </div>
 
-        <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
+        <h3 className="text-sm font-bold text-slate-100 group-hover:text-sky-300 transition-colors line-clamp-1">
           {station.name.split('—')[1]?.trim() || station.name}
         </h3>
 
@@ -57,7 +57,7 @@ export default function StationCard({ station, onSelect, isSelected = false }) {
       <div className="grid grid-cols-3 gap-2 bg-white/[.02] border border-white/[.05] rounded-xl p-2.5 text-center">
         <div>
           <div className="text-[9px] uppercase font-semibold text-slate-400">Power</div>
-          <div className="text-xs font-bold text-white mt-0.5 flex items-center justify-center gap-0.5">
+          <div className="text-xs font-bold text-slate-100 mt-0.5 flex items-center justify-center gap-0.5">
             <Zap className="w-3 h-3 text-sky-400" />
             <span>{station.power} kW</span>
           </div>
@@ -72,7 +72,7 @@ export default function StationCard({ station, onSelect, isSelected = false }) {
 
         <div>
           <div className="text-[9px] uppercase font-semibold text-slate-400">Plug</div>
-          <div className="text-xs font-bold text-slate-200 mt-0.5">
+          <div className="text-xs font-bold text-slate-100 mt-0.5">
             {station.connector}
           </div>
         </div>
@@ -87,7 +87,7 @@ export default function StationCard({ station, onSelect, isSelected = false }) {
           </span>
         </div>
 
-        <div className="flex items-center gap-1 font-semibold text-slate-300">
+        <div className="flex items-center gap-1 font-semibold text-slate-200">
           <ShieldCheck className="w-3 h-3 text-sky-400" />
           <span>{station.uptime || 99}% Uptime</span>
         </div>

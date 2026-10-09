@@ -22,7 +22,7 @@ import { walletService } from '../../services/walletService';
 import { chargingService } from '../../services/chargingService';
 import { formatCurrency } from '../../utils/formatters';
 
-export default function WalletPage({ onBalanceSync }) {
+export default function WalletPage({ onBalanceSync, theme }) {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,14 +191,14 @@ export default function WalletPage({ onBalanceSync }) {
 
       {/* Success Toast */}
       {successToast && (
-        <div className="glass rounded-xl p-3.5 border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between text-xs text-emerald-200 animate-fade-in">
+        <div className="glass rounded-xl p-3.5 border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between text-xs text-emerald-400 animate-fade-in">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{successToast}</span>
           </div>
           <button
             onClick={() => setSuccessToast(null)}
-            className="text-emerald-400 font-bold ml-3 hover:text-white"
+            className="text-emerald-400 font-bold ml-3 hover:text-slate-900 dark:hover:text-white"
           >
             ✕
           </button>
@@ -222,7 +222,7 @@ export default function WalletPage({ onBalanceSync }) {
           </div>
           <button
             onClick={fetchWalletData}
-            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-white/[.08] hover:bg-white/[.15] border border-white/[.15] text-sky-300 transition-colors inline-flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-white/[.08] hover:bg-white/[.15] border border-white/[.15] text-sky-400 transition-colors inline-flex items-center gap-2 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Retry
@@ -232,7 +232,7 @@ export default function WalletPage({ onBalanceSync }) {
         <>
           {/* Pass Card & Quick Top-Up Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-            <VahanPassCard balance={balance} currency={currency} status={status} />
+            <VahanPassCard balance={balance} currency={currency} status={status} theme={theme} />
             <QuickTopUp onTopUp={(amt) => handleOpenTopUp(amt)} />
           </div>
 
@@ -288,7 +288,7 @@ export default function WalletPage({ onBalanceSync }) {
               onClick={() => setActiveTab('ledger')}
               className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'ledger'
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -300,7 +300,7 @@ export default function WalletPage({ onBalanceSync }) {
               onClick={() => setActiveTab('payments')}
               className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'payments'
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                   : 'text-slate-400 hover:text-white'
               }`}
             >

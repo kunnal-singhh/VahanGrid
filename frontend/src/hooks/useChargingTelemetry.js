@@ -203,18 +203,38 @@ export function useChargingTelemetry({ initialSession, onSessionStopped, isActiv
       setIsStopping(true);
       setStopError(null);
 
-      // Stop session in backend
-      const stopped = await chargingService.stopChargingSession(sessionId);
+      // Stop session in backend (treat 409 / SESSION_ALREADY_STOPPED as success)
+      let stopped;
+      try {
+        stopped = await chargingService.stopChargingSession(sessionId);
+      } catch (stopErr) {
+        if (
+          stopErr?.code === 'SESSION_ALREADY_STOPPED' ||
+          stopErr?.status === 409 ||
+          stopErr?.message?.toLowerCase().includes('already')
+        ) {
+          stopped = { ...(session || {}), status: 'stopped' };
+        } else {
+          throw stopErr;
+        }
+      }
+
       setSession(stopped);
 
-      // Stop active telemetry polling
+      // Stop active telemetry polling and timers
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
 
       // Fetch finalized CDR (with 1 quick retry for async finalization)
-      let cdr = await chargingService.getSessionCdr(sessionId);
-      if (!cdr) {
-        await new Promise((r) => setTimeout(r, 800));
+      let cdr = null;
+      try {
         cdr = await chargingService.getSessionCdr(sessionId);
+        if (!cdr) {
+          await new Promise((r) => setTimeout(r, 800));
+          cdr = await chargingService.getSessionCdr(sessionId);
+        }
+      } catch (cdrErr) {
+        console.warn('[useChargingTelemetry] CDR fetch warning:', cdrErr);
       }
 
       if (cdr) {
@@ -222,7 +242,11 @@ export function useChargingTelemetry({ initialSession, onSessionStopped, isActiv
       }
 
       if (onSessionStopped) {
-        onSessionStopped(stopped, cdr);
+        try {
+          onSessionStopped(stopped, cdr);
+        } catch (cbErr) {
+          console.warn('[useChargingTelemetry] onSessionStopped callback warning:', cbErr);
+        }
       }
 
       return { session: stopped, cdr };
@@ -233,7 +257,7 @@ export function useChargingTelemetry({ initialSession, onSessionStopped, isActiv
     } finally {
       setIsStopping(false);
     }
-  }, [session?.id, isStopping, onSessionStopped]);
+  }, [session?.id, session?.status, isStopping, onSessionStopped]);
 
   return {
     session,

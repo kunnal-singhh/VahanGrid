@@ -44,7 +44,7 @@ function formatSessionStatusChip(status) {
     case 'active':
       return {
         label: 'Active',
-        classes: 'bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse',
+        classes: 'bg-sky-500/20 text-sky-400 border border-sky-500/30 animate-pulse',
       };
     case 'completed':
       return {
@@ -54,7 +54,7 @@ function formatSessionStatusChip(status) {
     case 'stopped':
       return {
         label: 'Stopped',
-        classes: 'bg-teal-500/15 text-teal-300 border border-teal-500/30',
+        classes: 'bg-teal-500/15 text-teal-400 border border-teal-500/30',
       };
     case 'failed':
       return {
@@ -64,12 +64,12 @@ function formatSessionStatusChip(status) {
     case 'cancelled':
       return {
         label: 'Cancelled',
-        classes: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+        classes: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
       };
     default:
       return {
         label: status ? status.replace(/_/g, ' ') : 'Unknown',
-        classes: 'bg-slate-500/15 text-slate-300 border border-slate-500/30',
+        classes: 'bg-slate-500/15 text-slate-500 border border-slate-500/30',
       };
   }
 }
@@ -226,7 +226,7 @@ export default function HistoryPage({ onNavigateToWallet }) {
             <p className="text-xs text-slate-300 max-w-sm mx-auto">{error}</p>
             <button
               onClick={fetchHistory}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-white/[.06] hover:bg-white/[.1] border border-white/[.1] text-sky-300 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-white/[.06] hover:bg-white/[.1] border border-white/[.1] text-sky-400 transition-colors"
             >
               Retry
             </button>
@@ -280,8 +280,8 @@ export default function HistoryPage({ onNavigateToWallet }) {
                             isSettled
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                               : isFailed
-                              ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
-                              : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                           }`}
                         >
                           {isSettled
@@ -320,7 +320,7 @@ export default function HistoryPage({ onNavigateToWallet }) {
 
                     <button
                       onClick={() => handleViewInvoice(session)}
-                      className="p-2 rounded-xl bg-white/[.04] hover:bg-white/[.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-2 rounded-xl bg-white/[.04] hover:bg-white/[.08] text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                       title="View Session CDR Receipt"
                       aria-label={`View CDR receipt for session at ${stationName}`}
                     >

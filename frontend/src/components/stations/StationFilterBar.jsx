@@ -26,7 +26,7 @@ export default function StationFilterBar({
           {searchQuery && (
             <button
               onClick={() => onSearchChange('')}
-              className="text-slate-400 hover:text-white p-0.5"
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-0.5"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -40,7 +40,7 @@ export default function StationFilterBar({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               filterStatus === 'all'
                 ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             All Status
@@ -50,7 +50,7 @@ export default function StationFilterBar({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               filterStatus === 'available'
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-white'
+                : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Available Only
@@ -65,7 +65,7 @@ export default function StationFilterBar({
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold border whitespace-nowrap transition-all cursor-pointer ${
             filterOperator === 'all'
               ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
-              : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-white hover:bg-white/[.04]'
+              : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/[.04]'
           }`}
         >
           All Networks
@@ -78,7 +78,7 @@ export default function StationFilterBar({
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold border whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               filterOperator === op.id
                 ? 'bg-sky-500/15 border-sky-500/30 text-sky-400 shadow-sm'
-                : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-white hover:bg-white/[.04]'
+                : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/[.04]'
             }`}
           >
             <span>{op.logo}</span>

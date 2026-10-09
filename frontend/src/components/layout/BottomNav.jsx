@@ -24,7 +24,13 @@ export default function BottomNav({ activePage, onNavigate, theme, activeChargin
             key={id}
             onClick={() => onNavigate(id)}
             className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-all relative ${
-              isActive ? 'text-sky-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
+              theme === 'light'
+                ? isActive
+                  ? 'text-sky-600 font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+                : isActive
+                ? 'text-sky-400 font-semibold'
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Icon className="w-5 h-5" />
@@ -36,7 +42,7 @@ export default function BottomNav({ activePage, onNavigate, theme, activeChargin
             )}
 
             {/* Charging pulse dot */}
-            {id === 'charging' && activeChargingSession && (
+            {id === 'charging' && activeChargingSession && activeChargingSession.status !== 'stopped' && activeChargingSession.status !== 'completed' && (
               <span className="absolute top-2 right-1/3 w-2 h-2 rounded-full bg-sky-400 animate-blink" />
             )}
           </button>

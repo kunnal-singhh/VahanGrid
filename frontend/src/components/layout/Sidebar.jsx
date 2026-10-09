@@ -106,7 +106,7 @@ export default function Sidebar({
           {/* Close for mobile drawer */}
           <button
             onClick={onCloseMobileDrawer}
-            className="md:hidden p-1.5 text-slate-400 hover:text-white"
+            className="md:hidden p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
@@ -132,7 +132,7 @@ export default function Sidebar({
                 {(sidebarOpen || mobileDrawerOpen) && (
                   <span className="truncate flex-1 text-left">{label}</span>
                 )}
-                {id === 'charging' && activeChargingSession && (
+                {id === 'charging' && activeChargingSession && activeChargingSession.status !== 'stopped' && activeChargingSession.status !== 'completed' && (
                   <span className="w-2 h-2 rounded-full bg-sky-400 animate-blink shrink-0" />
                 )}
               </button>
@@ -252,7 +252,7 @@ export default function Sidebar({
         {/* Desktop Collapse Button */}
         <button
           onClick={onToggleSidebar}
-          className="hidden md:flex h-11 items-center justify-center border-t border-white/[.06] text-slate-400 hover:text-white transition-colors cursor-pointer"
+          className="hidden md:flex h-11 items-center justify-center border-t border-white/[.06] text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
           title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         >
           {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}

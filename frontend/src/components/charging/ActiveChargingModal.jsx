@@ -68,7 +68,11 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
     onSessionStopped: (stoppedSession, cdr) => {
       // Trigger parent callback if provided
       if (onStop) {
-        onStop(stoppedSession?.id, true);
+        try {
+          onStop(stoppedSession?.id, true);
+        } catch (e) {
+          console.warn('[ActiveChargingModal] onStop error:', e);
+        }
       }
       setShowSummaryView(true);
     },
@@ -95,8 +99,15 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
     try {
       await stopCharging();
       setShowSummaryView(true);
-    } catch {
-      // Handled in hook
+    } catch (err) {
+      if (
+        err?.code === 'SESSION_ALREADY_STOPPED' ||
+        err?.status === 409 ||
+        err?.message?.toLowerCase().includes('already') ||
+        err?.message?.toLowerCase().includes('terminal')
+      ) {
+        setShowSummaryView(true);
+      }
     }
   };
 
@@ -108,7 +119,7 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-blink" />
           <span>Live Telemetry</span>
           {lastRefreshedAt && (
-            <span className="text-[10px] text-emerald-300/80 font-mono">
+            <span className="text-[10px] text-emerald-400 font-mono">
               • {new Date(lastRefreshedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
@@ -117,7 +128,7 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
     }
     if (freshness === 'idle') {
       return (
-        <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1 text-[11px] font-semibold text-amber-300">
+        <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1 text-[11px] font-semibold text-amber-400">
           <span className="w-2 h-2 rounded-full bg-amber-400" />
           <span>Connected • Standby</span>
         </div>
@@ -125,7 +136,7 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
     }
     if (freshness === 'stale') {
       return (
-        <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/30 rounded-full px-3 py-1 text-[11px] font-semibold text-orange-300">
+        <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/30 rounded-full px-3 py-1 text-[11px] font-semibold text-orange-400">
           <span className="w-2 h-2 rounded-full bg-orange-400" />
           <span>Telemetry Stale</span>
         </div>
@@ -142,16 +153,16 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER: Post-Session Finalized CDR Summary
   // ─────────────────────────────────────────────────────────────────────────────
-  if (showSummaryView || (isTerminal && finalCdr)) {
+  if (showSummaryView || isTerminal) {
     const cdrTotal = finalCdr?.total_amount ?? session.cost_amount ?? 0;
-    const cdrEnergy = finalCdr?.energy_kwh ?? energyKwh ?? 0;
-    const cdrDuration = finalCdr?.duration_seconds ?? elapsedSeconds ?? 0;
-    const breakdown = finalCdr?.pricing_breakdown || {};
+    const cdrEnergy = finalCdr?.energy_kwh ?? session.energy_kwh ?? energyKwh ?? 0;
+    const cdrDuration = finalCdr?.duration_seconds ?? session.duration_seconds ?? elapsedSeconds ?? 0;
+    const breakdown = finalCdr?.pricing_breakdown || session.pricing_breakdown || {};
     const settlementStatus = finalCdr?.settlement_status || 'settled';
 
     return (
-      <div className="fixed inset-0 z-[1700] backdrop-blur-md bg-black/80 flex items-center justify-center p-4 animate-fade-in">
-        <div className="panel-surface border border-white/[.15] rounded-3xl p-6 md:p-8 w-full max-w-lg shadow-2xl relative animate-slide-up flex flex-col space-y-5">
+      <div className="fixed inset-0 z-[1700] backdrop-blur-md bg-black/80 flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+        <div className="panel-surface border border-white/[.15] rounded-3xl p-5 md:p-7 w-full max-w-lg shadow-2xl relative animate-slide-up flex flex-col space-y-5 my-auto max-h-[92vh] overflow-y-auto">
           <div className="text-center space-y-2">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
               <CheckCircle2 className="w-6 h-6" />
@@ -218,7 +229,7 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
               className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
                 settlementStatus === 'settled'
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
               }`}
             >
               {settlementStatus === 'settled' ? 'Settled via VahanPass Wallet' : 'Settlement Pending'}
@@ -245,7 +256,7 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
 
   return (
     <div className="fixed inset-0 z-[1700] backdrop-blur-md bg-black/80 flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
-      <div className="panel-surface border border-white/[.15] rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl relative animate-slide-up flex flex-col items-center my-auto">
+      <div className="panel-surface border border-white/[.15] rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl relative animate-slide-up flex flex-col items-center my-auto max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         {onClose && (
           <button
@@ -392,23 +403,25 @@ export default function ActiveChargingModal({ session: initialSession, onStop, o
         )}
 
         {/* ─── Terminate Session Button ─── */}
-        <button
-          onClick={handleStopClick}
-          disabled={isStopping}
-          className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-sm bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 hover:border-rose-500/50 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isStopping ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
-              <span>Stopping charging session...</span>
-            </>
-          ) : (
-            <>
-              <StopCircle className="w-4 h-4" />
-              <span>Stop Charging</span>
-            </>
-          )}
-        </button>
+        {!isTerminal && (
+          <button
+            onClick={handleStopClick}
+            disabled={isStopping}
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-sm bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 hover:border-rose-500/50 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isStopping ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                <span>Stopping charging session...</span>
+              </>
+            ) : (
+              <>
+                <StopCircle className="w-4 h-4" />
+                <span>Stop Charging</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

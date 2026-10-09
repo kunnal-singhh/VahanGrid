@@ -189,7 +189,7 @@ export default function AuthPage({ onExploreGuest }) {
           {error && (
             <div
               id="auth-error-banner"
-              className="mb-5 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2.5 text-xs text-rose-300 animate-fade-in"
+              className="mb-5 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2.5 text-xs text-rose-400 animate-fade-in"
             >
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <span>{error}</span>

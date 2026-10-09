@@ -242,7 +242,7 @@ export default function StationDetailsModal({
                         !isAvailable
                           ? 'opacity-50 bg-white/[.01] border-white/[.04] cursor-not-allowed'
                           : isSelected
-                          ? 'bg-sky-500/15 border-sky-500/50 text-white shadow-sm cursor-pointer'
+                          ? 'bg-sky-500/15 border-sky-500/50 text-sky-400 shadow-sm cursor-pointer'
                           : 'bg-white/[.03] border-white/[.06] hover:border-white/[.15] text-slate-300 cursor-pointer'
                       }`}
                     >
@@ -333,7 +333,7 @@ export default function StationDetailsModal({
               </div>
               <button
                 onClick={() => setStartError(null)}
-                className="text-rose-400 hover:text-white text-xs font-bold"
+                className="text-rose-400 hover:text-slate-900 dark:hover:text-white text-xs font-bold"
               >
                 ✕
               </button>
@@ -384,7 +384,7 @@ export default function StationDetailsModal({
         {/* Action Buttons */}
         <div className="space-y-2 pt-1">
           {isCharging ? (
-            <div className="w-full py-3 px-4 rounded-xl text-center text-xs font-semibold bg-sky-500/15 border border-sky-500/30 text-sky-300 flex items-center justify-center gap-2">
+            <div className="w-full py-3 px-4 rounded-xl text-center text-xs font-semibold bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center gap-2">
               <Zap className="w-4 h-4 text-sky-400" />
               <span>You already have an active charging session ongoing.</span>
             </div>

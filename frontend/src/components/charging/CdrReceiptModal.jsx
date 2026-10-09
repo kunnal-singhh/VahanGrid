@@ -249,17 +249,17 @@ export default function CdrReceiptModal({
                     {settlementStatus === 'settled' ? (
                       <>
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-300">Wallet Settled</span>
+                        <span className="text-emerald-400">Wallet Settled</span>
                       </>
                     ) : settlementStatus === 'failed' ? (
                       <>
                         <AlertTriangle className="w-4 h-4 text-rose-400" />
-                        <span className="text-rose-300">Settlement Failed</span>
+                        <span className="text-rose-400">Settlement Failed</span>
                       </>
                     ) : (
                       <>
                         <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-                        <span className="text-amber-300">Settlement Pending</span>
+                        <span className="text-amber-400">Settlement Pending</span>
                       </>
                     )}
                   </div>
@@ -290,13 +290,13 @@ export default function CdrReceiptModal({
                     )}
 
                     {retryError && (
-                      <p className="text-[11px] text-rose-300 bg-rose-500/20 p-2 rounded-xl">
+                      <p className="text-[11px] text-rose-400 bg-rose-500/20 p-2 rounded-xl">
                         {retryError}
                       </p>
                     )}
 
                     {retrySuccess && (
-                      <p className="text-[11px] text-emerald-300 bg-emerald-500/20 p-2 rounded-xl">
+                      <p className="text-[11px] text-emerald-400 bg-emerald-500/20 p-2 rounded-xl">
                         {retrySuccess}
                       </p>
                     )}
@@ -308,7 +308,7 @@ export default function CdrReceiptModal({
                             onClose();
                             onOpenTopUp();
                           }}
-                          className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
                           <PlusCircle className="w-3.5 h-3.5" />
                           <span>Top Up Wallet</span>

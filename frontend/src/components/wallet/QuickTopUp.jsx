@@ -33,7 +33,7 @@ export default function QuickTopUp({ onTopUp, isProcessing = false }) {
             className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
               selectedAmount === amt
                 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 shadow-md shadow-emerald-500/10'
-                : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-white hover:bg-white/[.05]'
+                : 'bg-white/[.02] border-white/[.06] text-slate-400 hover:text-slate-900 hover:bg-white/[.05]'
             }`}
           >
             {formatCompactCurrency(amt)}
