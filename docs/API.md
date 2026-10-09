@@ -1,4 +1,4 @@
-# VahanGrid REST API Specification
+﻿# VahanGrid REST API Specification
 
 > **Base URL:** `http://localhost:3001/api/v1`  
 > **Content-Type:** `application/json`  
@@ -192,9 +192,9 @@ Finds charging stations within a radial distance from a given GPS coordinate usi
 #### Query Parameters
 | Parameter | Type | Required | Default | Validation |
 |---|---|---|---|---|
-| `lat` | number | **Yes** | — | Latitude between `-90.0` and `90.0` |
-| `lng` | number | **Yes** | — | Longitude between `-180.0` and `180.0` |
-| `radius_km` | number | No | `5` | Radius in kilometers (`> 0` and `≤ 100`) |
+| `lat` | number | **Yes** | â€” | Latitude between `-90.0` and `90.0` |
+| `lng` | number | **Yes** | â€” | Longitude between `-180.0` and `180.0` |
+| `radius_km` | number | No | `5` | Radius in kilometers (`> 0` and `â‰¤ 100`) |
 
 #### Request
 ```http
@@ -303,10 +303,10 @@ Create a new user account. Automatically creates a linked INR wallet in the same
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | ✅ | Full name (min 2 characters) |
-| `email` | string | ✅ | Valid email address (normalized to lowercase) |
-| `phone` | string | ❌ | Indian mobile number (e.g. `9876543210` or `+919876543210`) |
-| `password` | string | ✅ | Minimum 8 characters |
+| `name` | string | âœ… | Full name (min 2 characters) |
+| `email` | string | âœ… | Valid email address (normalized to lowercase) |
+| `phone` | string | âŒ | Indian mobile number (e.g. `9876543210` or `+919876543210`) |
+| `password` | string | âœ… | Minimum 8 characters |
 
 ```json
 {
@@ -338,7 +338,7 @@ Create a new user account. Automatically creates a linked INR wallet in the same
 }
 ```
 
-The `vg_token` cookie is also set on the response — the user is logged in immediately after registration.
+The `vg_token` cookie is also set on the response â€” the user is logged in immediately after registration.
 
 #### Error Responses
 
@@ -391,7 +391,7 @@ The `vg_token` cookie is set on the response.
 | Status | `error.code` | Cause |
 |--------|-------------|-------|
 | `400` | `VALIDATION_ERROR` | Missing email or password |
-| `401` | `INVALID_CREDENTIALS` | Wrong email or password (same code for both — prevents email enumeration) |
+| `401` | `INVALID_CREDENTIALS` | Wrong email or password (same code for both â€” prevents email enumeration) |
 
 ---
 
@@ -440,7 +440,7 @@ Returns the currently authenticated user's profile. Requires a valid `vg_token` 
 | Status | `error.code` | Cause |
 |--------|-------------|-------|
 | `401` | `MISSING_TOKEN` | No `vg_token` cookie present |
-| `401` | `TOKEN_EXPIRED` | JWT has expired — user must log in again |
+| `401` | `TOKEN_EXPIRED` | JWT has expired â€” user must log in again |
 | `401` | `INVALID_TOKEN` | JWT signature is invalid |
 | `401` | `USER_NOT_FOUND` | Token is valid but user no longer exists in the database |
 
@@ -452,13 +452,13 @@ Returns the currently authenticated user's profile. Requires a valid `vg_token` 
 - **Email enumeration is prevented**: login returns `INVALID_CREDENTIALS` for both wrong email and wrong password.
 - **Timing attack mitigation**: a dummy bcrypt compare runs even when the user is not found, so response times are consistent.
 - **Client-supplied user IDs are never trusted**: `req.user` is populated exclusively from the verified JWT and a fresh DB lookup.
-- **SQL injection**: all queries use parameterized SQL (`$1`, `$2`, …). No string concatenation.
+- **SQL injection**: all queries use parameterized SQL (`$1`, `$2`, â€¦). No string concatenation.
 
 ---
 
 ## 4. User Profile
 
-All user profile endpoints require a valid `vg_token` cookie. The user identity is always derived from the token — never from a client-supplied ID.
+All user profile endpoints require a valid `vg_token` cookie. The user identity is always derived from the token â€” never from a client-supplied ID.
 
 ---
 
@@ -521,7 +521,7 @@ Returns the updated user object (same shape as `GET /users/me`).
 
 ## 5. Vehicles
 
-All vehicle endpoints require a valid `vg_token` cookie. **Authorization is enforced at the database layer** — every query includes `AND user_id = <authenticated user id>`, preventing any cross-user access (IDOR protection).
+All vehicle endpoints require a valid `vg_token` cookie. **Authorization is enforced at the database layer** â€” every query includes `AND user_id = <authenticated user id>`, preventing any cross-user access (IDOR protection).
 
 **Accepted `connector_type` values:** `CCS2`, `CCS1`, `CHAdeMO`, `Type2`, `Type1`, `Bharat DC-001`, `Bharat AC-001`, `GBT_AC`, `GBT_DC`
 
@@ -566,14 +566,14 @@ Create a new vehicle for the authenticated user.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `manufacturer` | string | ✅ | e.g. `"Tata Motors"` |
-| `model` | string | ✅ | e.g. `"Nexon EV"` |
-| `variant` | string | ❌ | e.g. `"Max"` |
-| `battery_capacity_kwh` | number | ✅ | Must be > 0 |
-| `usable_battery_capacity_kwh` | number | ❌ | Must be > 0 and ≤ battery_capacity_kwh |
-| `connector_type` | string | ✅ | One of the accepted values above |
-| `max_ac_power_kw` | number | ❌ | Must be ≥ 0 |
-| `max_dc_power_kw` | number | ❌ | Must be ≥ 0 |
+| `manufacturer` | string | âœ… | e.g. `"Tata Motors"` |
+| `model` | string | âœ… | e.g. `"Nexon EV"` |
+| `variant` | string | âŒ | e.g. `"Max"` |
+| `battery_capacity_kwh` | number | âœ… | Must be > 0 |
+| `usable_battery_capacity_kwh` | number | âŒ | Must be > 0 and â‰¤ battery_capacity_kwh |
+| `connector_type` | string | âœ… | One of the accepted values above |
+| `max_ac_power_kw` | number | âŒ | Must be â‰¥ 0 |
+| `max_dc_power_kw` | number | âŒ | Must be â‰¥ 0 |
 
 #### Response `201 Created`
 
@@ -647,7 +647,7 @@ Delete a vehicle. Returns `404` if not found or not owned.
 
 ### Vehicle Authorization Notes
 
-- **IDOR prevention**: every SQL query for a specific vehicle includes `AND user_id = $<authenticated_user_id>`. Even if a malformed request sends the wrong vehicle ID, the DB query returns 0 rows — not a 403, but a 404 (to avoid revealing existence of another user's resource).
+- **IDOR prevention**: every SQL query for a specific vehicle includes `AND user_id = $<authenticated_user_id>`. Even if a malformed request sends the wrong vehicle ID, the DB query returns 0 rows â€” not a 403, but a 404 (to avoid revealing existence of another user's resource).
 - **user_id in body is ignored**: the service always uses `req.user.id` from the verified JWT.
 
 ---
@@ -897,7 +897,7 @@ Stops an active charging session owned by the authenticated user.
 Retrieves the finalized Charge Detail Record (CDR) for a specific session.
 
 - **Authentication:** Required (`vg_token` cookie or Bearer token).
-- **Access Control:** Enforces ownership — returns `403 FORBIDDEN` if requested by another user.
+- **Access Control:** Enforces ownership â€” returns `403 FORBIDDEN` if requested by another user.
 - **Session Lifecycle:** Returns `404 NOT_FOUND` if the session has not reached a terminal billable state (`completed` or `stopped`).
 
 #### Response `200 OK`
@@ -1013,10 +1013,10 @@ Returns the full CDR record including immutable snapshots (`tariff_snapshot`, `p
 Explicitly triggers or retries settlement of a finalized CDR against the authenticated user's wallet.
 
 - **Authentication:** Required (`vg_token` cookie or Bearer token).
-- **Access Control:** Enforces ownership — returns `403 FORBIDDEN` (`CDR_ACCESS_DENIED`) if requested for another user's CDR.
+- **Access Control:** Enforces ownership â€” returns `403 FORBIDDEN` (`CDR_ACCESS_DENIED`) if requested for another user's CDR.
 - **Source of Truth:** The settlement amount is strictly taken from the immutable `cdr.total_amount`. The client cannot specify or tamper with the settlement amount.
 - **Idempotency:** Protected at both application layer and DB unique index (`uq_wallet_txns_cdr_id`). Re-calling on an already settled CDR returns `200 OK` with `already_settled: true` without double-debiting.
-- **Zero-Amount Sessions:** For ₹0.00 sessions, marks `settlement_status = 'settled'` without creating an invalid ₹0.00 ledger transaction.
+- **Zero-Amount Sessions:** For â‚¹0.00 sessions, marks `settlement_status = 'settled'` without creating an invalid â‚¹0.00 ledger transaction.
 
 #### Response `200 OK` (Successful Settlement)
 ```json
@@ -1057,7 +1057,7 @@ Explicitly triggers or retries settlement of a finalized CDR against the authent
 Creates a server-authoritative payment intent/order to top up the authenticated user's wallet.
 
 - **Authentication:** Required (`vg_token` cookie or Bearer token).
-- **Validation:** Amount must be positive, between ₹10 and ₹50,000, currency must be `'INR'`.
+- **Validation:** Amount must be positive, between â‚¹10 and â‚¹50,000, currency must be `'INR'`.
 - **Integrity:** The backend records the authoritative amount in `payments` table and initiates a gateway order (Razorpay).
 
 #### Request Body
@@ -1358,13 +1358,13 @@ All administrative, remote charger control, and tariff management endpoints enfo
 
 ### 2. Protected Station Remote Operations
 Mounted at `/api/v1/stations/:id/*` (Requires `authenticate` + `requireStationOperator`):
-- `POST /api/v1/stations/:id/availability` — Remote ChangeAvailability
-- `POST /api/v1/stations/:id/reset` — Remote Soft/Hard Reset
-- `POST /api/v1/stations/:id/unlock-connector` — Remote UnlockConnector
-- `POST /api/v1/stations/:id/trigger-message` — Remote TriggerMessage
-- `POST /api/v1/stations/:id/charging-profiles` — Remote SetChargingProfile
-- `POST /api/v1/stations/:id/clear-charging-profile` — Remote ClearChargingProfile
-- `DELETE /api/v1/stations/:id/charging-profiles` — Remote ClearChargingProfile alias
+- `POST /api/v1/stations/:id/availability` â€” Remote ChangeAvailability
+- `POST /api/v1/stations/:id/reset` â€” Remote Soft/Hard Reset
+- `POST /api/v1/stations/:id/unlock-connector` â€” Remote UnlockConnector
+- `POST /api/v1/stations/:id/trigger-message` â€” Remote TriggerMessage
+- `POST /api/v1/stations/:id/charging-profiles` â€” Remote SetChargingProfile
+- `POST /api/v1/stations/:id/clear-charging-profile` â€” Remote ClearChargingProfile
+- `DELETE /api/v1/stations/:id/charging-profiles` â€” Remote ClearChargingProfile alias
 
 **Authorization Rules:**
 - Unauthenticated requests: `401 UNAUTHENTICATED`
@@ -1374,10 +1374,10 @@ Mounted at `/api/v1/stations/:id/*` (Requires `authenticate` + `requireStationOp
 
 ### 3. Protected Tariff Management
 Mounted at `/api/v1/tariffs/*`:
-- `POST /api/v1/tariffs` — Create Tariff (Requires `authenticate` + `requireTariffOperator`)
+- `POST /api/v1/tariffs` â€” Create Tariff (Requires `authenticate` + `requireTariffOperator`)
   - Server automatically locks `cpo_id` to `req.user.cpo_id`.
   - If `location_id` is provided, verifies that location belongs to operator's CPO.
-- `GET /api/v1/tariffs` — List Tariffs (Requires `authenticate` + `requireOperator`)
+- `GET /api/v1/tariffs` â€” List Tariffs (Requires `authenticate` + `requireOperator`)
   - Automatically filters results to `cpo_id = req.user.cpo_id`.
 - `PATCH /api/v1/tariffs/:id` & `DELETE /api/v1/tariffs/:id` (Requires `authenticate` + `requireTariffOperator`)
   - Verifies target tariff belongs to `req.user.cpo_id`.
@@ -1455,7 +1455,7 @@ Paginated fleet station inventory with live EVSE/connector capacity, OCPP connec
 
 #### Query Parameters
 - `page` (integer >= 1, default `1`)
-- `limit` (integer 1–50, default `10`)
+- `limit` (integer 1â€“50, default `10`)
 - `status` (string, optional): One of `all` (default), `active`, `inactive`, `maintenance`
 - `search` (string, optional): Substring filter on station name or city
 - `cpo_id` (UUID, optional, **admin only**)
@@ -1510,7 +1510,7 @@ Paginated session feed scoped strictly to the operator's stations with masked dr
 
 #### Query Parameters
 - `page` (integer >= 1, default `1`)
-- `limit` (integer 1–100, default `20`)
+- `limit` (integer 1â€“100, default `20`)
 - `status` (string, optional): One of `all` (default), `charging`, `completed`, `stopped`, `faulted`
 - `station_id` (UUID, optional): Filter sessions for a specific station
 - `cpo_id` (UUID, optional, **admin only**)
@@ -1632,7 +1632,7 @@ Fetch full detail for a single charging station, including CPO details, EVSE inv
     "cpo_id": "a0000001-0000-0000-0000-000000000001",
     "source_type": "internal",
     "source_id": null,
-    "name": "Tata Power Fast Charger — Connaught Place",
+    "name": "Tata Power Fast Charger â€” Connaught Place",
     "address_line1": "Block A, Inner Circle, Connaught Place",
     "address_line2": null,
     "city": "New Delhi",
@@ -1679,15 +1679,15 @@ Fetch full detail for a single charging station, including CPO details, EVSE inv
 Update mutable metadata of a station owned by the authenticated operator's CPO.
 
 #### Mutable Fields
-- `name` (string, 1–255 characters)
-- `address_line1` (string, 1–255 characters)
+- `name` (string, 1â€“255 characters)
+- `address_line1` (string, 1â€“255 characters)
 - `address_line2` (string, max 255 characters, nullable)
-- `city` (string, 1–100 characters)
-- `state` (string, 1–100 characters)
+- `city` (string, 1â€“100 characters)
+- `state` (string, 1â€“100 characters)
 - `postal_code` (string, max 20 characters, nullable)
-- `timezone` (string, 1–50 characters, e.g. `Asia/Kolkata`)
+- `timezone` (string, 1â€“50 characters, e.g. `Asia/Kolkata`)
 - `status` (string, `active` or `inactive`)
-- `latitude` (number, -90 to 90) & `longitude` (number, -180 to 180) — *must be provided together*
+- `latitude` (number, -90 to 90) & `longitude` (number, -180 to 180) â€” *must be provided together*
 
 #### Protected / Immutable Fields
 Attempts to supply any of the following fields return `422 IMMUTABLE_FIELD`:
@@ -1696,7 +1696,7 @@ Attempts to supply any of the following fields return `422 IMMUTABLE_FIELD`:
 #### Request Body Example
 ```json
 {
-  "name": "Tata Power Fast Charger — Connaught Place (Hub 1)",
+  "name": "Tata Power Fast Charger â€” Connaught Place (Hub 1)",
   "address_line1": "Block A, Outer Circle, Connaught Place",
   "city": "New Delhi",
   "state": "Delhi",
@@ -1713,7 +1713,7 @@ Attempts to supply any of the following fields return `422 IMMUTABLE_FIELD`:
   "message": "Station updated successfully",
   "data": {
     "id": "e0000001-0000-0000-0000-000000000001",
-    "name": "Tata Power Fast Charger — Connaught Place (Hub 1)",
+    "name": "Tata Power Fast Charger â€” Connaught Place (Hub 1)",
     "address_line1": "Block A, Outer Circle, Connaught Place",
     "city": "New Delhi",
     "state": "Delhi",
@@ -1735,9 +1735,9 @@ Protected endpoints for operators (`operator`) and administrators (`admin`) to q
 Lists active/inactive tariffs scoped strictly to the operator's CPO. Platform administrators can pass `?cpo_id=` or omit it for platform-wide view.
 
 #### Query Parameters
-- `search` (string, optional) — Case-insensitive filter matching tariff name, station name, or description.
-- `location_id` (UUID, optional) — Filter tariffs scoped to a specific station.
-- `is_active` (boolean, optional) — Filter by active (`true`) or inactive (`false`) status.
+- `search` (string, optional) â€” Case-insensitive filter matching tariff name, station name, or description.
+- `location_id` (UUID, optional) â€” Filter tariffs scoped to a specific station.
+- `is_active` (boolean, optional) â€” Filter by active (`true`) or inactive (`false`) status.
 
 #### Response `200 OK`
 ```json
@@ -1832,4 +1832,141 @@ Deactivates or removes a tariff plan owned by the operator.
 
 
 
+
+
+---
+
+## Operator Session Operations (Phase 4E)
+
+All routes require `Authorization` via HTTP-only JWT cookie (`vg_token`) with operator or admin role. Drivers receive `403 OPERATOR_ROLE_REQUIRED`.
+
+---
+
+### `GET /api/v1/operator/sessions`
+
+Returns a paginated, multi-filtered session feed scoped to the authenticated operator's CPO. Driver PII is masked server-side.
+
+#### Query Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `page` | integer | Page number (default: 1) |
+| `limit` | integer | Page size, max 100 (default: 20) |
+| `status` | string | `active`, `stopped`, `completed`, `faulted`, `pending`, `cancelled`, `all` |
+| `settlement_status` | string | `settled`, `pending`, `failed`, `none`, `all` |
+| `station_id` | UUID | Filter to a specific station |
+| `from` | ISO date | Lower bound for `started_at` (e.g. `2026-10-01`) |
+| `to` | ISO date | Upper bound for `started_at` (e.g. `2026-10-10`) |
+| `search` | string | Free-text search across station name, city, vehicle model, session ID |
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "sess-uuid",
+      "status": "stopped",
+      "started_at": "2026-10-09T10:00:00.000Z",
+      "ended_at": "2026-10-09T11:15:00.000Z",
+      "energy_kwh": 14.5,
+      "cost_amount": 240.00,
+      "tariff_id": "tariff-uuid",
+      "tariff_snapshot": { "price_per_kwh": 15.00, "tax_rate": 0.18 },
+      "driver": { "name": "Priya S." },
+      "station": { "id": "loc-uuid", "name": "Tata EZ Hub", "city": "Mumbai" },
+      "hardware": { "evse_uid": "EVSE-01", "connector_code": "1", "standard": "IEC_62196_T2" },
+      "cdr": { "id": "cdr-uuid", "settlement_status": "settled", "settled_at": "2026-10-09T11:20:00.000Z" }
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 28, "total_pages": 2 }
+}
+```
+
+#### Error Responses
+- `400 INVALID_STATUS` — unknown session status value
+- `400 INVALID_SETTLEMENT_STATUS` — unknown settlement_status value
+- `401 UNAUTHORIZED` — not authenticated
+- `403 OPERATOR_ROLE_REQUIRED` — driver account used
+
+---
+
+### `GET /api/v1/operator/sessions/:id`
+
+Returns comprehensive audit details for a single charging session owned by the operator's CPO. Includes hardware, masked driver PII, tariff snapshot, and CDR.
+
+#### Path Parameters
+- `id` — Session UUID
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "sess-uuid",
+    "status": "stopped",
+    "meter_start": 12500,
+    "meter_stop": 27000,
+    "energy_kwh": 14.5,
+    "cost_amount": 240.00,
+    "started_at": "2026-10-09T10:00:00.000Z",
+    "ended_at": "2026-10-09T11:15:00.000Z",
+    "stop_reason": "Remote",
+    "station": { "id": "loc-uuid", "name": "Tata EZ Hub", "city": "Mumbai", "state": "Maharashtra", "cpo_id": "cpo-uuid" },
+    "hardware": { "evse_uid": "EVSE-01", "connector_code": "1", "standard": "IEC_62196_T2", "max_power_kw": 22, "current_type": "AC" },
+    "charger": { "charge_point_id": "CP-001", "is_connected": false, "transaction_id": 42 },
+    "driver": { "name": "Priya S.", "email": "p***@example.com", "phone": "+91 98*** 0000" },
+    "vehicle": { "make": "Tata", "model": "Nexon EV", "license_plate": "MH 01 ** 0000" },
+    "tariff_id": "tariff-uuid",
+    "tariff_snapshot": { "price_per_kwh": 15.00, "session_fee": 5.00, "tax_rate": 0.18, "grace_period_minutes": 15 },
+    "cdr": { "id": "cdr-uuid", "settlement_status": "settled", "total_cost_inr": 240.00, "tax_amount": 36.57, "settled_at": "2026-10-09T11:20:00.000Z" }
+  }
+}
+```
+
+#### Error Responses
+- `400 INVALID_ID` — malformed UUID
+- `401 UNAUTHORIZED` — not authenticated
+- `403 OPERATOR_ROLE_REQUIRED` — driver account
+- `404 SESSION_NOT_FOUND` — session doesn't exist or belongs to another CPO
+
+---
+
+### `POST /api/v1/operator/sessions/:id/remote-stop`
+
+Dispatches an OCPP `RequestStopTransaction` command to the active charger. Session is only marked stopped if the charger returns `Accepted`.
+
+#### Path Parameters
+- `id` — Active session UUID
+
+#### Request Body
+```json
+{ "timeoutMs": 10000 }
+```
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "session": { "id": "sess-uuid", "status": "stopped", "energy_kwh": 14.5 },
+    "command": "RequestStopTransaction",
+    "outcome": "Confirmed"
+  },
+  "message": "Remote stop executed successfully."
+}
+```
+
+#### Error Responses
+| Status | Code | Description |
+|---|---|---|
+| `400` | `INVALID_ID` | Malformed session UUID |
+| `401` | `UNAUTHORIZED` | Not authenticated |
+| `403` | `OPERATOR_ROLE_REQUIRED` | Driver account |
+| `403` | `CPO_ACCESS_DENIED` | Session belongs to another CPO |
+| `404` | `SESSION_NOT_FOUND` | Session not found |
+| `409` | `SESSION_ALREADY_STOPPED` | Session already in terminal state |
+| `409` | `REMOTE_STOP_REJECTED` | Charger rejected `RequestStopTransaction` |
+| `503` | `STATION_OFFLINE` | Charger is disconnected from OCPP gateway |
+| `504` | `STATION_TIMEOUT` | Charger did not respond within `timeoutMs` |
 

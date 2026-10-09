@@ -24,6 +24,8 @@ import SessionMonitoringFeed from './components/SessionMonitoringFeed';
 import EditStationModal from './components/EditStationModal';
 import TariffManagementTable from './components/TariffManagementTable';
 import EditTariffModal from './components/EditTariffModal';
+import SessionDetailModal from './components/SessionDetailModal';
+import RemoteStopConfirmModal from './components/RemoteStopConfirmModal';
 
 const OVERVIEW_PERIODS = [
   { id: '24h', label: '24 Hours' },
@@ -77,9 +79,18 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
   const [sessions, setSessions] = useState([]);
   const [sessionPagination, setSessionPagination] = useState({ page: 1, limit: 20, total_count: 0, total_pages: 1 });
   const [sessionStatus, setSessionStatus] = useState('all');
+  const [sessionStationId, setSessionStationId] = useState(null);
+  const [sessionSettlementStatus, setSessionSettlementStatus] = useState('all');
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionFromDate, setSessionFromDate] = useState('');
+  const [sessionToDate, setSessionToDate] = useState('');
   const [sessionPage, setSessionPage] = useState(1);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState(null);
+
+  // Session Action Modals (Phase 4E)
+  const [inspectSessionId, setInspectSessionId] = useState(null);
+  const [remoteStopTargetSession, setRemoteStopTargetSession] = useState(null);
 
   // Tariff Management State (Phase 4D)
   const [tariffs, setTariffs] = useState([]);
@@ -165,6 +176,11 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
         page: sessionPage,
         limit: 20,
         status: sessionStatus,
+        stationId: sessionStationId,
+        settlementStatus: sessionSettlementStatus,
+        from: sessionFromDate || null,
+        to: sessionToDate || null,
+        search: sessionSearch,
         cpoId: activeCpoId,
       });
       setSessions(res.sessions);
@@ -175,7 +191,17 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
     } finally {
       setLoadingSessions(false);
     }
-  }, [isAuthorized, sessionPage, sessionStatus, activeCpoId]);
+  }, [
+    isAuthorized,
+    sessionPage,
+    sessionStatus,
+    sessionStationId,
+    sessionSettlementStatus,
+    sessionFromDate,
+    sessionToDate,
+    sessionSearch,
+    activeCpoId,
+  ]);
 
   // ── Fetch Tariffs (Phase 4D) ──
   const fetchTariffs = useCallback(async () => {
@@ -262,6 +288,32 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
     setSessionStatus(val);
     setSessionPage(1);
   };
+
+  const handleSessionStationChange = (val) => {
+    setSessionStationId(val);
+    setSessionPage(1);
+  };
+
+  const handleSessionSettlementStatusChange = (val) => {
+    setSessionSettlementStatus(val);
+    setSessionPage(1);
+  };
+
+  const handleSessionSearchChange = (val) => {
+    setSessionSearch(val);
+    setSessionPage(1);
+  };
+
+  const handleSessionDateRangeChange = ({ from, to }) => {
+    setSessionFromDate(from);
+    setSessionToDate(to);
+    setSessionPage(1);
+  };
+
+  const handleRemoteStopSuccess = useCallback(() => {
+    fetchSessions();
+    fetchOverview();
+  }, [fetchSessions, fetchOverview]);
 
   const handleStationUpdated = useCallback((updatedStation) => {
     // 1. Optimistically update station record in the table view
@@ -531,9 +583,21 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           loading={loadingSessions}
           error={sessionsError}
           status={sessionStatus}
+          stationId={sessionStationId}
+          settlementStatus={sessionSettlementStatus}
+          search={sessionSearch}
+          fromDate={sessionFromDate}
+          toDate={sessionToDate}
+          stations={stations}
           onStatusChange={handleSessionStatusChange}
+          onStationChange={handleSessionStationChange}
+          onSettlementStatusChange={handleSessionSettlementStatusChange}
+          onSearchChange={handleSessionSearchChange}
+          onDateRangeChange={handleSessionDateRangeChange}
           onPageChange={setSessionPage}
           onRetry={fetchSessions}
+          onInspectSession={(sess) => setInspectSessionId(sess.id || sess.session_id)}
+          onRemoteStopSession={(sess) => setRemoteStopTargetSession(sess)}
           theme={theme}
         />
       )}
@@ -558,6 +622,27 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           theme={theme}
         />
       )}
+
+      {/* ─── Modal: Session Audit Inspection (Phase 4E) ─── */}
+      <SessionDetailModal
+        sessionId={inspectSessionId}
+        isOpen={Boolean(inspectSessionId)}
+        onClose={() => setInspectSessionId(null)}
+        onRemoteStopTrigger={(sess) => {
+          setInspectSessionId(null);
+          setRemoteStopTargetSession(sess);
+        }}
+        theme={theme}
+      />
+
+      {/* ─── Modal: Authorized Remote Stop Confirmation (Phase 4E) ─── */}
+      <RemoteStopConfirmModal
+        isOpen={Boolean(remoteStopTargetSession)}
+        session={remoteStopTargetSession}
+        onClose={() => setRemoteStopTargetSession(null)}
+        onSuccess={handleRemoteStopSuccess}
+        theme={theme}
+      />
     </div>
   );
 }

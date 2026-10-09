@@ -18,6 +18,8 @@
 
 import { query } from '../config/database.js';
 import connectionRegistry from '../ocpp/connectionRegistry.js';
+import { remoteStopSession } from './sessionService.js';
+import { resolveOcppIdentityBySession } from './ocppMappingService.js';
 
 /**
  * Mask driver name to First Name + Initial (e.g. "Priya Sharma" -> "Priya S.")
@@ -313,10 +315,64 @@ export async function getOperatorSessions({
   limit = 20,
   status = 'all',
   stationId = null,
+  settlementStatus = 'all',
+  startDate = null,
+  endDate = null,
+  search = null,
 }) {
   const safePage = Math.max(1, parseInt(page, 10) || 1);
   const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
   const offset = (safePage - 1) * safeLimit;
+
+  const conditions = [];
+  const countParams = [];
+
+  if (cpoId) {
+    countParams.push(cpoId);
+    conditions.push(`l.cpo_id = $${countParams.length}`);
+  }
+
+  if (stationId) {
+    countParams.push(stationId);
+    conditions.push(`l.id = $${countParams.length}`);
+  }
+
+  if (status && status !== 'all') {
+    countParams.push(status);
+    conditions.push(`cs.status = $${countParams.length}`);
+  }
+
+  if (settlementStatus && settlementStatus !== 'all') {
+    if (settlementStatus === 'none') {
+      conditions.push(`cdr.id IS NULL`);
+    } else {
+      countParams.push(settlementStatus);
+      conditions.push(`cdr.settlement_status = $${countParams.length}`);
+    }
+  }
+
+  if (startDate) {
+    countParams.push(new Date(startDate).toISOString());
+    conditions.push(`cs.started_at >= $${countParams.length}`);
+  }
+
+  if (endDate) {
+    countParams.push(new Date(endDate).toISOString());
+    conditions.push(`cs.started_at <= $${countParams.length}`);
+  }
+
+  if (search && search.trim()) {
+    countParams.push(`%${search.trim()}%`);
+    conditions.push(`(
+      l.name ILIKE $${countParams.length} OR
+      l.city ILIKE $${countParams.length} OR
+      v.model ILIKE $${countParams.length} OR
+      v.manufacturer ILIKE $${countParams.length} OR
+      cs.id::text ILIKE $${countParams.length}
+    )`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   // Total count
   const countRes = await query(
@@ -325,14 +381,18 @@ export async function getOperatorSessions({
      JOIN connectors cn ON cs.connector_id = cn.id
      JOIN evses e ON cn.evse_id = e.id
      JOIN locations l ON e.location_id = l.id
-     WHERE ($1::uuid IS NULL OR l.cpo_id = $1)
-       AND ($2::uuid IS NULL OR l.id = $2)
-       AND ($3::text = 'all' OR cs.status = $3)`,
-    [cpoId, stationId, status]
+     LEFT JOIN vehicles v ON cs.vehicle_id = v.id
+     LEFT JOIN cdrs cdr ON cdr.session_id = cs.id
+     ${whereClause}`,
+    countParams
   );
   const total = countRes.rows[0]?.total || 0;
 
   // Sessions rows
+  const queryParams = [...countParams, safeLimit, offset];
+  const limitIdx = queryParams.length - 1;
+  const offsetIdx = queryParams.length;
+
   const sessionsRes = await query(
     `SELECT
        cs.id,
@@ -345,6 +405,9 @@ export async function getOperatorSessions({
        cs.currency,
        cs.start_soc::float AS start_soc,
        cs.end_soc::float AS end_soc,
+       cs.tariff_id,
+       cs.tariff_snapshot,
+       cs.pricing_breakdown,
        l.id AS station_id,
        l.name AS station_name,
        l.city AS station_city,
@@ -358,7 +421,10 @@ export async function getOperatorSessions({
        v.model AS vehicle_model,
        cdr.id AS cdr_id,
        cdr.settlement_status,
-       cdr.total_amount::float AS cdr_total_amount
+       cdr.total_amount::float AS cdr_total_amount,
+       cdr.subtotal::float AS cdr_subtotal,
+       cdr.tax_amount::float AS cdr_tax_amount,
+       cdr.settled_at
      FROM charging_sessions cs
      JOIN connectors cn ON cs.connector_id = cn.id
      JOIN evses e ON cn.evse_id = e.id
@@ -366,12 +432,10 @@ export async function getOperatorSessions({
      LEFT JOIN users u ON cs.user_id = u.id
      LEFT JOIN vehicles v ON cs.vehicle_id = v.id
      LEFT JOIN cdrs cdr ON cdr.session_id = cs.id
-     WHERE ($1::uuid IS NULL OR l.cpo_id = $1)
-       AND ($2::uuid IS NULL OR l.id = $2)
-       AND ($3::text = 'all' OR cs.status = $3)
+     ${whereClause}
      ORDER BY cs.started_at DESC
-     LIMIT $4 OFFSET $5`,
-    [cpoId, stationId, status, safeLimit, offset]
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    queryParams
   );
 
   const sessions = sessionsRes.rows.map((row) => ({
@@ -403,11 +467,19 @@ export async function getOperatorSessions({
       name: maskDriverName(row.driver_raw_name),
       vehicle: row.vehicle_manufacturer ? `${row.vehicle_manufacturer} ${row.vehicle_model}` : null,
     },
+    tariff: {
+      id: row.tariff_id,
+      snapshot: row.tariff_snapshot,
+      pricing_breakdown: row.pricing_breakdown,
+    },
     cdr: row.cdr_id
       ? {
           id: row.cdr_id,
           settlement_status: row.settlement_status,
           total_amount: row.cdr_total_amount,
+          subtotal: row.cdr_subtotal,
+          tax_amount: row.cdr_tax_amount,
+          settled_at: row.settled_at,
         }
       : null,
   }));
@@ -420,6 +492,164 @@ export async function getOperatorSessions({
       total,
       total_pages: Math.ceil(total / safeLimit) || 1,
     },
+  };
+}
+
+/**
+ * 4. Single Session Detail (for operator audit/inspection)
+ */
+export async function getOperatorSessionDetail(sessionId, cpoId, isAdmin = false) {
+  const res = await query(
+    `SELECT
+       cs.id,
+       cs.status,
+       cs.started_at,
+       cs.ended_at,
+       cs.duration_seconds,
+       cs.energy_kwh::float AS energy_kwh,
+       cs.cost_amount::float AS cost_amount,
+       cs.currency,
+       cs.start_soc::float AS start_soc,
+       cs.end_soc::float AS end_soc,
+       cs.tariff_id,
+       cs.tariff_snapshot,
+       cs.pricing_breakdown,
+       cs.external_session_id,
+       l.id AS station_id,
+       l.name AS station_name,
+       l.address_line1 AS station_address,
+       l.city AS station_city,
+       l.state AS station_state,
+       l.cpo_id,
+       c.name AS cpo_name,
+       c.short_code AS cpo_short_code,
+       e.id AS evse_id,
+       e.evse_uid,
+       cn.id AS connector_id,
+       cn.connector_id AS connector_code,
+       cn.standard AS connector_standard,
+       cn.format AS connector_format,
+       cn.power_type AS connector_power_type,
+       cn.max_power_kw::float AS max_power_kw,
+       cn.status AS connector_status,
+       u.name AS driver_raw_name,
+       v.manufacturer AS vehicle_manufacturer,
+       v.model AS vehicle_model,
+       cdr.id AS cdr_id,
+       cdr.settlement_status,
+       cdr.total_amount::float AS cdr_total_amount,
+       cdr.subtotal::float AS cdr_subtotal,
+       cdr.tax_amount::float AS cdr_tax_amount,
+       cdr.settled_at,
+       cdr.settlement_failure_reason,
+       cdr.wallet_transaction_id
+     FROM charging_sessions cs
+     JOIN connectors cn ON cs.connector_id = cn.id
+     JOIN evses e ON cn.evse_id = e.id
+     JOIN locations l ON e.location_id = l.id
+     JOIN cpos c ON l.cpo_id = c.id
+     LEFT JOIN users u ON cs.user_id = u.id
+     LEFT JOIN vehicles v ON cs.vehicle_id = v.id
+     LEFT JOIN cdrs cdr ON cdr.session_id = cs.id
+     WHERE cs.id = $1`,
+    [sessionId]
+  );
+
+  if (res.rows.length === 0) {
+    return null;
+  }
+
+  const row = res.rows[0];
+
+  if (!isAdmin && row.cpo_id !== cpoId) {
+    const err = new Error('Access denied. You cannot inspect a session belonging to another Charge Point Operator.');
+    err.statusCode = 403;
+    err.code = 'CPO_ACCESS_DENIED';
+    throw err;
+  }
+
+  // Check live OCPP connection status
+  const ocppSessionInfo = await resolveOcppIdentityBySession(sessionId);
+  const isOnline = ocppSessionInfo?.charge_point_id ? connectionRegistry.has(ocppSessionInfo.charge_point_id) : false;
+
+  return {
+    id: row.id,
+    status: row.status,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    duration_seconds: row.duration_seconds,
+    energy_kwh: row.energy_kwh,
+    cost_amount: row.cost_amount,
+    currency: row.currency,
+    soc: {
+      start: row.start_soc,
+      end: row.end_soc,
+    },
+    station: {
+      id: row.station_id,
+      name: row.station_name,
+      address: row.station_address,
+      city: row.station_city,
+      state: row.station_state,
+      cpo_id: row.cpo_id,
+      cpo_name: row.cpo_name,
+      cpo_short_code: row.cpo_short_code,
+    },
+    hardware: {
+      evse_id: row.evse_id,
+      evse_uid: row.evse_uid,
+      connector_id: row.connector_id,
+      connector_code: row.connector_code,
+      standard: row.connector_standard,
+      format: row.connector_format,
+      power_type: row.connector_power_type,
+      max_power_kw: row.max_power_kw,
+      status: row.connector_status,
+    },
+    ocpp: {
+      charge_point_id: ocppSessionInfo?.charge_point_id || null,
+      is_online: isOnline,
+      transaction_id: ocppSessionInfo?.transaction_id || row.external_session_id || null,
+    },
+    driver: {
+      name: maskDriverName(row.driver_raw_name),
+      vehicle: row.vehicle_manufacturer ? `${row.vehicle_manufacturer} ${row.vehicle_model}` : null,
+    },
+    tariff: {
+      id: row.tariff_id,
+      snapshot: row.tariff_snapshot,
+      pricing_breakdown: row.pricing_breakdown,
+    },
+    cdr: row.cdr_id
+      ? {
+          id: row.cdr_id,
+          settlement_status: row.settlement_status,
+          total_amount: row.cdr_total_amount,
+          subtotal: row.cdr_subtotal,
+          tax_amount: row.cdr_tax_amount,
+          settled_at: row.settled_at,
+          settlement_failure_reason: row.settlement_failure_reason,
+          has_wallet_transaction: Boolean(row.wallet_transaction_id),
+        }
+      : null,
+  };
+}
+
+/**
+ * 5. Operator Remote Stop Session (Phase 4E)
+ */
+export async function operatorRemoteStopSession(sessionId, { cpoId, isAdmin = false, timeoutMs = 10000 } = {}) {
+  const stopped = await remoteStopSession(sessionId, null, {
+    isOperator: true,
+    operatorCpoId: cpoId,
+    isAdmin,
+    timeoutMs,
+  });
+
+  return {
+    ...stopped,
+    command: 'RequestStopTransaction',
+    outcome: 'Confirmed',
   };
 }
 

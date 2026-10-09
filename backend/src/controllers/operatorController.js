@@ -15,7 +15,8 @@ import * as operatorService from '../services/operatorService.js';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_PERIODS = ['24h', '7d', '30d'];
 const ALLOWED_STATION_STATUSES = ['active', 'inactive', 'all'];
-const ALLOWED_SESSION_STATUSES = ['active', 'completed', 'stopped', 'all'];
+const ALLOWED_SESSION_STATUSES = ['active', 'completed', 'stopped', 'pending', 'faulted', 'cancelled', 'all'];
+const ALLOWED_SETTLEMENT_STATUSES = ['settled', 'pending', 'failed', 'none', 'all'];
 
 /**
  * Helper to resolve and validate the authoritative CPO scope.
@@ -200,6 +201,10 @@ export async function getSessionsHandler(req, res, next) {
 
     const status = req.query.status || 'all';
     const stationId = req.query.station_id || null;
+    const settlementStatus = req.query.settlement_status || 'all';
+    const startDate = req.query.from || req.query.start_date || null;
+    const endDate = req.query.to || req.query.end_date || null;
+    const search = req.query.search || null;
 
     if (!ALLOWED_SESSION_STATUSES.includes(status)) {
       return res.status(400).json({
@@ -210,10 +215,35 @@ export async function getSessionsHandler(req, res, next) {
         },
       });
     }
+
+    if (!ALLOWED_SETTLEMENT_STATUSES.includes(settlementStatus)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATUS',
+          message: `Invalid settlement status '${settlementStatus}'. Allowed values: ${ALLOWED_SETTLEMENT_STATUSES.join(', ')}.`,
+        },
+      });
+    }
+
     if (stationId && !UUID_REGEX.test(stationId)) {
       return res.status(400).json({
         success: false,
         error: { code: 'INVALID_ID', message: "'station_id' must be a valid UUID." },
+      });
+    }
+
+    if (startDate && isNaN(new Date(startDate).getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DATE', message: "'from' must be a valid ISO 8601 date string." },
+      });
+    }
+
+    if (endDate && isNaN(new Date(endDate).getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DATE', message: "'to' must be a valid ISO 8601 date string." },
       });
     }
 
@@ -223,6 +253,10 @@ export async function getSessionsHandler(req, res, next) {
       limit,
       status,
       stationId,
+      settlementStatus,
+      startDate,
+      endDate,
+      search,
     });
 
     return res.status(200).json({
@@ -231,6 +265,86 @@ export async function getSessionsHandler(req, res, next) {
       meta: result.pagination,
     });
   } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/v1/operator/sessions/:id
+ * Retrieve single session details for operator audit with masked PII.
+ */
+export async function getSessionDetailHandler(req, res, next) {
+  try {
+    const { resolved, cpoId } = await resolveCpoScope(req, res);
+    if (!resolved) return;
+
+    const { id } = req.params;
+    if (!UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Session ID must be a valid UUID.' },
+      });
+    }
+
+    const session = await operatorService.getOperatorSessionDetail(id, cpoId, req.user.role === 'admin');
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'SESSION_NOT_FOUND', message: `Session with ID '${id}' was not found.` },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: session,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: { code: err.code || 'SESSION_ERROR', message: err.message },
+      });
+    }
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/operator/sessions/:id/remote-stop
+ * Remotely stop an active session at an operator-owned station.
+ */
+export async function operatorRemoteStopHandler(req, res, next) {
+  try {
+    const { resolved, cpoId } = await resolveCpoScope(req, res);
+    if (!resolved) return;
+
+    const { id } = req.params;
+    if (!UUID_REGEX.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Session ID must be a valid UUID.' },
+      });
+    }
+
+    const timeoutMs = req.body?.timeoutMs ? parseInt(req.body.timeoutMs, 10) : 10000;
+    const result = await operatorService.operatorRemoteStopSession(id, {
+      cpoId,
+      isAdmin: req.user.role === 'admin',
+      timeoutMs,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      message: 'Remote stop executed successfully.',
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        error: { code: err.code || 'REMOTE_STOP_ERROR', message: err.message },
+      });
+    }
     next(err);
   }
 }

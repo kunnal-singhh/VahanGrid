@@ -15,6 +15,8 @@ import {
   getOverviewHandler,
   getStationsHandler,
   getSessionsHandler,
+  getSessionDetailHandler,
+  operatorRemoteStopHandler,
   getAnalyticsHandler,
   getStationDetailHandler,
   updateStationHandler,
@@ -36,6 +38,12 @@ router.get('/stations', getStationsHandler);
 
 // GET /api/v1/operator/sessions   - Live and recent charging sessions (masked driver PII)
 router.get('/sessions', getSessionsHandler);
+
+// GET /api/v1/operator/sessions/:id - Detailed session audit record with masked PII
+router.get('/sessions/:id', getSessionDetailHandler);
+
+// POST /api/v1/operator/sessions/:id/remote-stop - Safely stop an active session at an owned station
+router.post('/sessions/:id/remote-stop', operatorRemoteStopHandler);
 
 // GET /api/v1/operator/analytics  - Time-series buckets for energy and revenue curves
 router.get('/analytics', getAnalyticsHandler);

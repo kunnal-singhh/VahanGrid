@@ -400,7 +400,7 @@ export async function getSessionById(sessionId, userId) {
  * @returns {Promise<object>} Updated rich session
  * @throws if session not found, not owned, or already stopped
  */
-export async function stopSession(sessionId, userId, options = {}) {
+export async function stopSession(sessionId, userId = null, options = {}) {
   if (options && options.remote === true) {
     return await remoteStopSession(sessionId, userId, options);
   }
@@ -409,12 +409,14 @@ export async function stopSession(sessionId, userId, options = {}) {
     await client.query('BEGIN');
 
     // Lock the session row to prevent race conditions.
+    const userClause = userId ? 'AND user_id = $2' : '';
+    const params = userId ? [sessionId, userId] : [sessionId];
     const lockResult = await client.query(
       `SELECT id, user_id, connector_id, status, started_at, energy_kwh, tariff_snapshot, currency
        FROM charging_sessions
-       WHERE id = $1 AND user_id = $2
+       WHERE id = $1 ${userClause}
        FOR UPDATE`,
-      [sessionId, userId]
+      params
     );
 
     if (lockResult.rows.length === 0) {
@@ -478,7 +480,7 @@ export async function stopSession(sessionId, userId, options = {}) {
     });
 
     // Return the updated session with rich details
-    return await getSessionById(sessionId, userId);
+    return await getSessionById(sessionId, session.user_id);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -726,22 +728,52 @@ export async function remoteStartSession(userId, connectorId, vehicleId, options
  * @returns {Promise<object>} Updated rich session
  */
 export async function remoteStopSession(sessionId, userId, options = {}) {
-  // 1. Verify session exists and belongs to user
-  const sessRes = await query(
-    `SELECT id, user_id, connector_id, status, external_session_id
-     FROM charging_sessions
-     WHERE id = $1 AND user_id = $2`,
-    [sessionId, userId]
-  );
+  // 1. Verify session exists and belongs to user or operator's CPO
+  let session;
+  if (options.isOperator) {
+    const sessRes = await query(
+      `SELECT cs.id, cs.user_id, cs.connector_id, cs.status, cs.external_session_id, l.cpo_id
+       FROM charging_sessions cs
+       JOIN connectors cn ON cs.connector_id = cn.id
+       JOIN evses e ON cn.evse_id = e.id
+       JOIN locations l ON e.location_id = l.id
+       WHERE cs.id = $1`,
+      [sessionId]
+    );
 
-  if (sessRes.rows.length === 0) {
-    const err = new Error('Session not found.');
-    err.statusCode = 404;
-    err.code = 'SESSION_NOT_FOUND';
-    throw err;
+    if (sessRes.rows.length === 0) {
+      const err = new Error('Session not found.');
+      err.statusCode = 404;
+      err.code = 'SESSION_NOT_FOUND';
+      throw err;
+    }
+
+    session = sessRes.rows[0];
+
+    if (!options.isAdmin && session.cpo_id !== options.operatorCpoId) {
+      const err = new Error('Access denied. You cannot manage sessions at another Charge Point Operator station.');
+      err.statusCode = 403;
+      err.code = 'CPO_ACCESS_DENIED';
+      throw err;
+    }
+  } else {
+    const sessRes = await query(
+      `SELECT id, user_id, connector_id, status, external_session_id
+       FROM charging_sessions
+       WHERE id = $1 AND user_id = $2`,
+      [sessionId, userId]
+    );
+
+    if (sessRes.rows.length === 0) {
+      const err = new Error('Session not found.');
+      err.statusCode = 404;
+      err.code = 'SESSION_NOT_FOUND';
+      throw err;
+    }
+
+    session = sessRes.rows[0];
   }
 
-  const session = sessRes.rows[0];
   if (session.status !== 'active' && session.status !== 'pending') {
     const err = new Error(`Session is already in a terminal state (status: ${session.status}).`);
     err.statusCode = 409;
@@ -754,20 +786,28 @@ export async function remoteStopSession(sessionId, userId, options = {}) {
 
   // If this session is not linked to an OCPP charger, stop directly
   if (!ocppSessionInfo || !ocppSessionInfo.charge_point_id) {
-    return await stopSession(sessionId, userId);
+    return await stopSession(sessionId, options.isOperator ? null : userId);
   }
 
   const transactionId = ocppSessionInfo.transaction_id || session.external_session_id;
 
   // If no transactionId has been allocated yet (e.g. pending session before plug-in):
   if (!transactionId) {
-    return await stopSession(sessionId, userId);
+    return await stopSession(sessionId, options.isOperator ? null : userId);
   }
 
   // 3. Check if charge point is online
   const isOnline = connectionRegistry.has(ocppSessionInfo.charge_point_id);
   if (!isOnline) {
-    // Fail-safe: stop directly in database so user is not stuck
+    if (options.isOperator) {
+      const err = new Error(
+        `Charging station '${ocppSessionInfo.charge_point_id}' is offline. Remote stop command cannot be delivered.`
+      );
+      err.statusCode = 503;
+      err.code = 'STATION_OFFLINE';
+      throw err;
+    }
+    // Fail-safe for drivers: stop directly in database so user is not stuck
     return await stopSession(sessionId, userId);
   }
 
@@ -782,10 +822,10 @@ export async function remoteStopSession(sessionId, userId, options = {}) {
     );
 
     if (stopResult && stopResult.status === 'Accepted') {
-      return await stopSession(sessionId, userId);
+      return await stopSession(sessionId, options.isOperator ? null : userId);
     } else {
       const rejErr = new Error(
-        `Charging station rejected remote stop request: ${stopResult?.statusInfo?.reasonCode || 'Rejected'}`
+        `Charging station rejected remote stop request: ${stopResult?.statusInfo?.reasonCode || stopResult?.status || 'Rejected'}`
       );
       rejErr.statusCode = 409;
       rejErr.code = 'REMOTE_STOP_REJECTED';
@@ -793,7 +833,7 @@ export async function remoteStopSession(sessionId, userId, options = {}) {
     }
   } catch (err) {
     if (options.failSafe) {
-      return await stopSession(sessionId, userId);
+      return await stopSession(sessionId, options.isOperator ? null : userId);
     }
     throw err;
   }

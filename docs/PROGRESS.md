@@ -34,10 +34,38 @@
 | **Phase 3E.4** | Wallet Top-Up & Payment Gateway Integration                 | ✅ Complete | `test_phase3e4.js` (63/63 passed)  |
 | **Phase 3F**   | Real-Time Active Charging Telemetry Dashboard               | ✅ Complete | `test_phase3f.js` (50/50 passed)   |
 | **Phase 3G**   | Unified Financial Activity & Wallet Hub                     | ✅ Complete | `test_phase3g.js` (63/63 passed)   |
+| **Phase 4A.1** | Multi-Tenant Authorization Middleware & Operator Role Model  | ✅ Complete | `test_phase4a1.js` (72/72 passed)  |
+| **Phase 4A.2** | Operator REST API Layer (overview, stations, sessions, analytics) | ✅ Complete | `test_phase4a2.js` (84/84 passed)  |
+| **Phase 4B**   | Operator Fleet Dashboard (Real-Time Multi-Tenant UI)         | ✅ Complete | `test_phase4b.js` (48/48 passed)   |
+| **Phase 4C**   | Operator Station Management (Detail Inspect & Metadata Edit) | ✅ Complete | `test_phase4c.js` (82/82 passed)   |
+| **Phase 4D**   | Operator Tariff Management (Create, Edit, Toggle, Snapshot)  | ✅ Complete | `test_phase4d.js` (58/58 passed)   |
+| **Phase 4E**   | Operator Session Operations & Monitoring (Filters, Inspect, Remote Stop) | ✅ Complete | `test_phase4e.js` (42/42 passed)   |
 
 ---
 
 ## Detailed Milestone Records
+
+### Phase 4E — Operator Session Operations & Monitoring
+- **Status:** Completed
+- **Date:** October 2026
+- **Test Suite:** `backend/src/scripts/test_phase4e.js` (42/42 tests passing)
+- **Frontend Build:** ✅ Zero errors, 1960 modules, gzip 228.76 kB
+- **Regression Suite:** `test_phase4d.js` (58/58 ✅), `test_phase4c.js` (82/82 ✅), `test_phase4b.js` (48/48 ✅), `test_phase4a2.js` (84/84 ✅)
+- **Commit:** `feat: improve operator session operations`
+- **Compliance Notice:** *"Phase 4E delivers authoritative session monitoring and carefully authorized operational control to the VahanGrid Operator Portal. Operators can filter the session feed by status, station, settlement state, date range, and search. An Inspect action opens a comprehensive tabbed audit modal surfacing hardware context (EVSE, connector, OCPP live gateway status), server-masked driver PII, locked tariff snapshot pricing, and immutable CDR settlement breakdown. For active sessions, operators can trigger Remote Stop via OCPP RequestStopTransaction with full handling of offline chargers (503), timeouts (504), charger rejections (409), and duplicate-stop guards. Cross-tenant isolation is strictly enforced. Tariff snapshots remain immutable — no retroactive repricing.*"
+
+#### Files Created / Modified:
+1. **`backend/src/routes/operator.js`** — Added `GET /sessions/:id` and `POST /sessions/:id/remote-stop`
+2. **`backend/src/controllers/operatorController.js`** — Added `getSessionDetailHandler` and `operatorRemoteStopHandler`
+3. **`backend/src/services/operatorService.js`** — Enhanced `getOperatorSessions` with filters; added `getOperatorSessionDetail` and `operatorRemoteStopSession`
+4. **`backend/src/services/sessionService.js`** — Added CPO ownership check and STATION_OFFLINE guard in `remoteStopSession`
+5. **`frontend/src/services/operatorService.js`** — Extended `getSessions` params; added `getSessionDetail` and `remoteStopSession`
+6. **`frontend/src/pages/Operator/components/SessionMonitoringFeed.jsx`** — Expanded filters, live indicators, Inspect and Remote Stop action buttons
+7. **`frontend/src/pages/Operator/components/SessionDetailModal.jsx`** *(new)* — Tabbed audit modal with hardware, tariff snapshot, and CDR financial tabs
+8. **`frontend/src/pages/Operator/components/RemoteStopConfirmModal.jsx`** *(new)* — Confirmation modal with typed error handling for all OCPP failure modes
+9. **`frontend/src/pages/Operator/OperatorDashboardPage.jsx`** — Wired all new filter states, handlers, and modals
+
+---
 
 ### Phase 3G — Unified Financial Activity & Wallet Hub
 - **Status:** Completed

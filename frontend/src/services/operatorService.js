@@ -98,15 +98,30 @@ export const operatorService = {
 
   /**
    * Fetch paginated charging sessions feed with masked driver privacy & linked CDR settlement.
-   * @param {{ page?: number, limit?: number, status?: string, stationId?: string, cpoId?: string }} [params]
+   * Supports filtering by status, stationId, settlementStatus, date range (from/to), and search query.
+   * @param {{ page?: number, limit?: number, status?: string, stationId?: string, settlementStatus?: string, from?: string, to?: string, search?: string, cpoId?: string }} [params]
    * @returns {Promise<{ sessions: Array<object>, meta: object }>}
    */
-  async getSessions({ page = 1, limit = 20, status = 'all', stationId = null, cpoId = null } = {}) {
+  async getSessions({
+    page = 1,
+    limit = 20,
+    status = 'all',
+    stationId = null,
+    settlementStatus = 'all',
+    from = null,
+    to = null,
+    search = '',
+    cpoId = null,
+  } = {}) {
     const params = new URLSearchParams();
     if (page) params.append('page', String(page));
     if (limit) params.append('limit', String(limit));
     if (status && status !== 'all') params.append('status', status);
     if (stationId) params.append('station_id', stationId);
+    if (settlementStatus && settlementStatus !== 'all') params.append('settlement_status', settlementStatus);
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    if (search && search.trim()) params.append('search', search.trim());
     if (cpoId) params.append('cpo_id', cpoId);
 
     const query = params.toString() ? `?${params.toString()}` : '';
@@ -183,5 +198,46 @@ export const operatorService = {
     const json = await handleResponse(res, 'Failed to update station metadata.');
     return json.data;
   },
+
+  /**
+   * Fetch complete session audit record with masked driver PII, tariff snapshot, and CDR details.
+   * Multi-tenant security enforced on server (operator can only view their own CPO sessions).
+   * @param {string} sessionId - Session UUID
+   * @returns {Promise<object>} session detail record
+   */
+  async getSessionDetail(sessionId) {
+    if (!sessionId) throw new Error('sessionId is required');
+
+    const res = await fetch(`${API_BASE_URL}/operator/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+
+    const json = await handleResponse(res, 'Failed to fetch session audit details.');
+    return json.data;
+  },
+
+  /**
+   * Remotely stop an active charging session at an operator-owned station.
+   * Dispatches OCPP RequestStopTransaction to connected charger or performs safe backend stop.
+   * @param {string} sessionId - Session UUID
+   * @param {{ timeoutMs?: number }} [options]
+   * @returns {Promise<object>} stop result record
+   */
+  async remoteStopSession(sessionId, { timeoutMs = 10000 } = {}) {
+    if (!sessionId) throw new Error('sessionId is required');
+
+    const res = await fetch(`${API_BASE_URL}/operator/sessions/${encodeURIComponent(sessionId)}/remote-stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ timeoutMs }),
+    });
+
+    const json = await handleResponse(res, 'Failed to execute remote stop.');
+    return json.data;
+  },
 };
+
 
