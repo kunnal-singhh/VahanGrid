@@ -76,6 +76,14 @@ async function startServer() {
     }, 10_000);
   }
 
+  process.on('uncaughtException', (err) => {
+    console.error('[server] ⚠️  Uncaught exception:', err.message, err.stack);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] ⚠️  Unhandled rejection:', reason);
+  });
+
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
 }
