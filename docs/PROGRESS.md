@@ -860,4 +860,37 @@
   - `test_phase4a1.js`: 54/54 passing.
   - `test_phase3g.js`: 63/63 passing.
 
+## Phase 4B — Operator Dashboard Frontend (Completed: October 10, 2026)
+
+- **Frontend Operator Client (`frontend/src/services/operatorService.js`):**
+  - Typed API service wrappers for `/api/v1/operator/overview`, `/stations`, `/sessions`, and `/analytics` with `credentials: 'include'` for secure cookie session transport.
+- **Operator Dashboard Page (`frontend/src/pages/Operator/OperatorDashboardPage.jsx`):**
+  - Role-guarded portal (`role === 'operator' || role === 'admin'`). Drivers blocked with clear informative lock banner.
+  - 30-second live auto-refresh polling with Page Visibility API tab-pause optimization.
+  - Dynamic admin scope switcher supporting platform-wide inspection or individual CPO drill-down.
+- **Dashboard Modular Sub-Components (`frontend/src/pages/Operator/components/`):**
+  - `OperatorOverviewCards.jsx`: 5 fleet KPI tiles (Total Stations, Online Fleet, Active Sessions, Revenue, Energy Delivered, Settlement Rate).
+  - `OperatorAnalyticsChart.jsx`: Custom SVG multi-axis time-series visualization for revenue and kWh volume trends across 24h, 7d, and 30d periods.
+  - `StationFleetTable.jsx`: Paginated station inventory with live OCPP telemetry indicators, connector breakdown badges, and search/filter controls.
+  - `SessionMonitoringFeed.jsx`: Live charging sessions feed with masked driver PII (`R*** S***`), hardware details, and CDR settlement status pills.
+- **Integration Test Suite (`backend/src/scripts/test_phase4b.js`):**
+  - 48 automated tests covering bundle integrity, driver denial, operator access, pagination, PII masking, analytics intervals, and admin switcher. 100% passing (48/48).
+
+## Phase 4C — Operator Station Management (Completed: October 10, 2026)
+
+- **Station Detail & Update Services (`backend/src/services/operatorService.js`):**
+  - `getStationDetail`: Fetches complete station detail record including CPO metadata, EVSE inventory, and attached connectors with statuses and power ratings.
+  - `updateStation`: Parameterized SQL dynamic builder updating only whitelisted mutable fields (`name`, `address_line1`, `address_line2`, `city`, `state`, `postal_code`, `timezone`, `status`, `latitude`, `longitude`).
+  - Strict immutability protection: Rejects requests attempting to alter `id`, `cpo_id`, `source_type`, `source_id`, `country_code`, `created_at`, or `updated_at` with `422 IMMUTABLE_FIELD`.
+- **Controller & Routes (`backend/src/controllers/operatorController.js` & `backend/src/routes/operator.js`):**
+  - Protected via `requireStationOperator` middleware guaranteeing operators can only read/modify stations belonging to their CPO.
+  - Handlers: `GET /api/v1/operator/stations/:id` and `PATCH /api/v1/operator/stations/:id`.
+  - Comprehensive server-side validation: Coordinate consistency (latitude and longitude must be updated together), bounds checking (-90 to 90, -180 to 180), string lengths, and status enums.
+- **Frontend Station Management UI:**
+  - `EditStationModal.jsx`: Multi-tab modal dialog supporting metadata editing with real-time field validation, dirty-tracking (submitting only modified fields), hardware telemetry inspection, and CPO tenant isolation audit view.
+  - `StationFleetTable.jsx`: Added action column with "Manage" button triggering the modal per station.
+  - `OperatorDashboardPage.jsx`: Real-time optimistic update and automatic fleet KPI resync upon station edits.
+- **Test Suite (`backend/src/scripts/test_phase4c.js`):**
+  - 82 automated integration tests covering route security (401/403), cross-CPO isolation, detail retrieval, metadata patching, immutable rejection, input validation, coordinate pairing, admin policies, and production bundle integrity. 100% passing (82/82).
+
 

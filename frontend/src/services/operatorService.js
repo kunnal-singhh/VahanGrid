@@ -143,4 +143,45 @@ export const operatorService = {
     const json = await handleResponse(res, 'Failed to fetch analytics time-series data.');
     return json.data;
   },
+
+  /**
+   * Fetch single station details including EVSEs and connectors for operator inspection/editing.
+   * Multi-tenant security enforced on server (operator can only view their own CPO stations).
+   * @param {string} stationId - Station UUID
+   * @returns {Promise<object>} station detail record
+   */
+  async getStationDetail(stationId) {
+    if (!stationId) throw new Error('stationId is required');
+
+    const res = await fetch(`${API_BASE_URL}/operator/stations/${encodeURIComponent(stationId)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+
+    const json = await handleResponse(res, 'Failed to fetch station details.');
+    return json.data;
+  },
+
+  /**
+   * Update mutable metadata of an operator's station.
+   * Multi-tenant security enforced on server (operator can only update their own CPO stations).
+   * @param {string} stationId - Station UUID
+   * @param {object} updates - mutable metadata fields { name, address_line1, address_line2, city, state, postal_code, timezone, status, latitude, longitude }
+   * @returns {Promise<object>} updated station record
+   */
+  async updateStation(stationId, updates) {
+    if (!stationId) throw new Error('stationId is required');
+
+    const res = await fetch(`${API_BASE_URL}/operator/stations/${encodeURIComponent(stationId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updates),
+    });
+
+    const json = await handleResponse(res, 'Failed to update station metadata.');
+    return json.data;
+  },
 };
+

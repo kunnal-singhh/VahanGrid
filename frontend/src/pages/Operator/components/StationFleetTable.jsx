@@ -11,6 +11,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Building2,
+  Settings,
   X
 } from 'lucide-react';
 import { formatTimestampIST } from '../../../utils/formatters';
@@ -26,6 +27,7 @@ export default function StationFleetTable({
   onStatusChange,
   onPageChange,
   onRetry,
+  onEditStation,
   theme = 'dark',
 }) {
   const [searchInput, setSearchInput] = useState(search);
@@ -164,6 +166,7 @@ export default function StationFleetTable({
                 <th className="py-3 px-3">Hardware Capacity</th>
                 <th className="py-3 px-3">Connector Status Breakdown</th>
                 <th className="py-3 px-3 text-center">Active Sessions</th>
+                <th className="py-3 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[.04]">
@@ -266,6 +269,19 @@ export default function StationFleetTable({
                       ) : (
                         <span className="text-slate-500 text-xs">0</span>
                       )}
+                    </td>
+
+                    {/* Action: Manage Station */}
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onEditStation && onEditStation(st)}
+                        className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition-all inline-flex items-center gap-1 cursor-pointer"
+                        title="Inspect & Edit Station"
+                      >
+                        <Settings className="w-3 h-3" />
+                        <span>Manage</span>
+                      </button>
                     </td>
                   </tr>
                 );

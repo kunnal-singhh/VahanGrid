@@ -19,6 +19,7 @@ import OperatorOverviewCards from './components/OperatorOverviewCards';
 import OperatorAnalyticsChart from './components/OperatorAnalyticsChart';
 import StationFleetTable from './components/StationFleetTable';
 import SessionMonitoringFeed from './components/SessionMonitoringFeed';
+import EditStationModal from './components/EditStationModal';
 
 const OVERVIEW_PERIODS = [
   { id: '24h', label: '24 Hours' },
@@ -66,6 +67,7 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
   const [stationPage, setStationPage] = useState(1);
   const [loadingStations, setLoadingStations] = useState(false);
   const [stationsError, setStationsError] = useState(null);
+  const [editingStationId, setEditingStationId] = useState(null);
 
   // Session Feed State
   const [sessions, setSessions] = useState([]);
@@ -227,6 +229,16 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
     setSessionStatus(val);
     setSessionPage(1);
   };
+
+  const handleStationUpdated = useCallback((updatedStation) => {
+    // 1. Optimistically update station record in the table view
+    setStations((prev) =>
+      prev.map((s) => (s.id === updatedStation.id ? { ...s, ...updatedStation } : s))
+    );
+    // 2. Refresh overview KPIs and stations list to keep aggregates in sync
+    fetchOverview();
+    fetchStations();
+  }, [fetchOverview, fetchStations]);
 
   // ── Authorization Guard View ──
   if (!isAuthenticated || !isAuthorized) {
@@ -439,6 +451,7 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           onStatusChange={handleStationStatusChange}
           onPageChange={setStationPage}
           onRetry={fetchStations}
+          onEditStation={(st) => setEditingStationId(st.id)}
           theme={theme}
         />
       )}
@@ -457,6 +470,17 @@ export default function OperatorDashboardPage({ theme = 'dark', onNavigate }) {
           theme={theme}
         />
       )}
+
+      {/* ─── Modal: Edit Station Management (Phase 4C) ─── */}
+      {editingStationId && (
+        <EditStationModal
+          stationId={editingStationId}
+          onClose={() => setEditingStationId(null)}
+          onStationUpdated={handleStationUpdated}
+          theme={theme}
+        />
+      )}
     </div>
   );
 }
+

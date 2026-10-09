@@ -424,6 +424,149 @@ export async function getOperatorSessions({
 }
 
 /**
+ * 5. Single Station Detail (for operator edit/view)
+ *
+ * Returns the full station record including CPO info, EVSEs, and connectors.
+ * Enforces CPO scope: operators only see their own stations.
+ *
+ * @param {string} stationId - Station UUID
+ * @param {string|null} cpoId - Owning CPO UUID (null only for admin platform view)
+ * @returns {Promise<object|null>} Station object or null if not found/not owned
+ */
+export async function getStationDetail(stationId, cpoId) {
+  const res = await query(
+    `SELECT
+       l.id,
+       l.cpo_id,
+       l.name,
+       l.address_line1,
+       l.address_line2,
+       l.city,
+       l.state,
+       l.postal_code,
+       l.country_code,
+       l.timezone,
+       l.latitude::float AS latitude,
+       l.longitude::float AS longitude,
+       l.status,
+       l.source_type,
+       l.last_verified_at,
+       l.created_at,
+       l.updated_at,
+       json_build_object(
+         'id', c.id,
+         'name', c.name,
+         'short_code', c.short_code
+       ) AS cpo,
+       COALESCE(
+         (
+           SELECT json_agg(
+             json_build_object(
+               'id', e.id,
+               'evse_uid', e.evse_uid,
+               'evse_code', e.evse_code,
+               'status', e.status,
+               'max_power_kw', e.max_power_kw::float,
+               'connectors', COALESCE(
+                 (
+                   SELECT json_agg(
+                     json_build_object(
+                       'id', cn.id,
+                       'connector_id', cn.connector_id,
+                       'standard', cn.standard,
+                       'format', cn.format,
+                       'power_type', cn.power_type,
+                       'max_power_kw', cn.max_power_kw::float,
+                       'status', cn.status
+                     )
+                     ORDER BY cn.connector_id ASC
+                   )
+                   FROM connectors cn
+                   WHERE cn.evse_id = e.id
+                 ),
+                 '[]'::json
+               )
+             )
+             ORDER BY e.evse_uid ASC
+           )
+           FROM evses e
+           WHERE e.location_id = l.id
+         ),
+         '[]'::json
+       ) AS evses
+     FROM locations l
+     JOIN cpos c ON l.cpo_id = c.id
+     WHERE l.id = $1
+       AND ($2::uuid IS NULL OR l.cpo_id = $2)`,
+    [stationId, cpoId]
+  );
+  return res.rows[0] || null;
+}
+
+/**
+ * 6. Update Station Metadata (safe mutable fields only)
+ *
+ * Only the following fields may be updated. Ownership (cpo_id), provenance
+ * (source_type, source_id), and last_verified_at are never touched.
+ * Caller must have already verified CPO ownership before invoking.
+ * Latitude/longitude changes automatically sync the PostGIS geography column
+ * via the existing database trigger.
+ *
+ * @param {string} stationId - Station UUID (already ownership-verified)
+ * @param {object} fields - Validated, sanitized field updates
+ * @returns {Promise<object|null>} Updated station row or null
+ */
+export async function updateStation(stationId, fields) {
+  const MUTABLE_FIELDS = [
+    'name',
+    'address_line1',
+    'address_line2',
+    'city',
+    'state',
+    'postal_code',
+    'timezone',
+    'latitude',
+    'longitude',
+    'status',
+  ];
+
+  // Filter only safe mutable fields that were actually provided
+  const setClauses = [];
+  const values = [];
+  let paramIndex = 1;
+
+  for (const field of MUTABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(fields, field)) {
+      setClauses.push(`${field} = $${paramIndex}`);
+      values.push(fields[field]);
+      paramIndex++;
+    }
+  }
+
+  if (setClauses.length === 0) {
+    // Nothing to update — return current record
+    return getStationDetail(stationId, null);
+  }
+
+  // Always update the updated_at timestamp
+  setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+  values.push(stationId); // final param for WHERE clause
+
+  const sql = `
+    UPDATE locations
+    SET ${setClauses.join(', ')}
+    WHERE id = $${paramIndex}
+    RETURNING id, cpo_id, name, address_line1, address_line2, city, state,
+              postal_code, country_code, timezone,
+              latitude::float AS latitude, longitude::float AS longitude,
+              status, source_type, last_verified_at, created_at, updated_at
+  `;
+
+  const res = await query(sql, values);
+  return res.rows[0] || null;
+}
+
+/**
  * 4. Time-series Analytics (Bounded bucketing)
  */
 export async function getOperatorAnalytics({ cpoId = null, period = '7d' }) {

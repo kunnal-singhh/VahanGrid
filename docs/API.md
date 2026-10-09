@@ -1602,4 +1602,128 @@ Continuous time-series analytics powered by bounded PostgreSQL date series gener
 }
 ```
 
+---
+
+## Phase 4C: Operator Station Management APIs
+
+Authenticated CPO operators can view full hardware details and safely update mutable operational metadata for stations belonging to their CPO. Multi-tenant isolation is enforced via `requireStationOperator` middleware.
+
+---
+
+### `GET /api/v1/operator/stations/:id`
+
+Fetch full detail for a single charging station, including CPO details, EVSE inventory, and real-time connector status.
+
+#### Security & Access Control
+- **Authentication**: Required (JWT cookie).
+- **Role**: `operator` (locked to their own CPO's stations) or `admin` (can view any station).
+- **Driver**: Denied with `403 OPERATOR_ROLE_REQUIRED`.
+- **Cross-CPO Access**: Denied with `403 CPO_ACCESS_DENIED`.
+
+#### Path Parameters
+- `id` (UUID): Station unique identifier.
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "id": "e0000001-0000-0000-0000-000000000001",
+    "cpo_id": "a0000001-0000-0000-0000-000000000001",
+    "source_type": "internal",
+    "source_id": null,
+    "name": "Tata Power Fast Charger — Connaught Place",
+    "address_line1": "Block A, Inner Circle, Connaught Place",
+    "address_line2": null,
+    "city": "New Delhi",
+    "state": "Delhi",
+    "postal_code": "110001",
+    "country_code": "IN",
+    "latitude": 28.6304,
+    "longitude": 77.2177,
+    "status": "active",
+    "timezone": "Asia/Kolkata",
+    "created_at": "2026-09-01T00:00:00.000Z",
+    "updated_at": "2026-10-10T02:00:00.000Z",
+    "cpo": {
+      "id": "a0000001-0000-0000-0000-000000000001",
+      "name": "Tata Power EZ Charge",
+      "short_code": "TATA_EZ"
+    },
+    "evses": [
+      {
+        "id": "...",
+        "evse_id": "EVSE-001",
+        "status": "AVAILABLE",
+        "connectors": [
+          {
+            "id": "...",
+            "connector_id": 1,
+            "standard": "CCS2",
+            "format": "Cable",
+            "power_type": "DC",
+            "max_power_kw": 60.0,
+            "status": "AVAILABLE"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### `PATCH /api/v1/operator/stations/:id`
+
+Update mutable metadata of a station owned by the authenticated operator's CPO.
+
+#### Mutable Fields
+- `name` (string, 1–255 characters)
+- `address_line1` (string, 1–255 characters)
+- `address_line2` (string, max 255 characters, nullable)
+- `city` (string, 1–100 characters)
+- `state` (string, 1–100 characters)
+- `postal_code` (string, max 20 characters, nullable)
+- `timezone` (string, 1–50 characters, e.g. `Asia/Kolkata`)
+- `status` (string, `active` or `inactive`)
+- `latitude` (number, -90 to 90) & `longitude` (number, -180 to 180) — *must be provided together*
+
+#### Protected / Immutable Fields
+Attempts to supply any of the following fields return `422 IMMUTABLE_FIELD`:
+- `id`, `cpo_id`, `source_type`, `source_id`, `country_code`, `created_at`, `updated_at`
+
+#### Request Body Example
+```json
+{
+  "name": "Tata Power Fast Charger — Connaught Place (Hub 1)",
+  "address_line1": "Block A, Outer Circle, Connaught Place",
+  "city": "New Delhi",
+  "state": "Delhi",
+  "status": "active",
+  "latitude": 28.6305,
+  "longitude": 77.2178
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "message": "Station updated successfully",
+  "data": {
+    "id": "e0000001-0000-0000-0000-000000000001",
+    "name": "Tata Power Fast Charger — Connaught Place (Hub 1)",
+    "address_line1": "Block A, Outer Circle, Connaught Place",
+    "city": "New Delhi",
+    "state": "Delhi",
+    "status": "active",
+    "latitude": 28.6305,
+    "longitude": 77.2178,
+    "updated_at": "2026-10-10T02:40:00.000Z"
+  }
+}
+```
+
+
 

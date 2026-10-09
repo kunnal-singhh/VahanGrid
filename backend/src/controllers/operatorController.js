@@ -267,3 +267,212 @@ export async function getAnalyticsHandler(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * GET /api/v1/operator/stations/:id
+ *
+ * Fetch full detail for a single station. Requires the station to belong to the
+ * operator's CPO. Admins may fetch any station. requireStationOperator middleware
+ * has already loaded and ownership-verified the station; we re-fetch for the full
+ * EVSE/connector payload from the operator service.
+ */
+export async function getStationDetailHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    // requireStationOperator has already validated ownership and set req.station.
+    // Use the station's own cpo_id so the service scoped query passes correctly.
+    const scopedCpoId = req.user.role === 'admin' ? null : req.user.cpo_id;
+
+    const station = await operatorService.getStationDetail(id, scopedCpoId);
+    if (!station) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'STATION_NOT_FOUND',
+          message: `Station with ID '${id}' was not found or does not belong to your network.`,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: station,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Allowed station status values (mirrors the DB CHECK constraint in locations table)
+const ALLOWED_LOCATION_STATUSES = ['active', 'inactive', 'under_construction', 'planned', 'decommissioned'];
+
+// Immutable / ownership fields operators must never change
+const IMMUTABLE_FIELDS = ['id', 'cpo_id', 'source_type', 'source_id', 'last_verified_at', 'created_at', 'updated_at', 'country_code'];
+
+/**
+ * PATCH /api/v1/operator/stations/:id
+ *
+ * Update mutable metadata for a station the operator owns.
+ * requireStationOperator middleware has already verified CPO ownership.
+ * This handler validates every accepted field individually then delegates
+ * to operatorService.updateStation which enforces a safe allowlist.
+ */
+export async function updateStationHandler(req, res, next) {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+
+    // Block any attempt to override immutable / ownership fields
+    for (const field of IMMUTABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        return res.status(422).json({
+          success: false,
+          error: {
+            code: 'IMMUTABLE_FIELD',
+            message: `Field '${field}' is immutable and cannot be changed.`,
+          },
+        });
+      }
+    }
+
+    // Collect validated fields
+    const fields = {};
+
+    if (body.name !== undefined) {
+      if (typeof body.name !== 'string' || body.name.trim().length === 0 || body.name.trim().length > 255) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'name' must be a non-empty string up to 255 characters." },
+        });
+      }
+      fields.name = body.name.trim();
+    }
+
+    if (body.address_line1 !== undefined) {
+      if (typeof body.address_line1 !== 'string' || body.address_line1.trim().length === 0 || body.address_line1.trim().length > 255) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'address_line1' must be a non-empty string up to 255 characters." },
+        });
+      }
+      fields.address_line1 = body.address_line1.trim();
+    }
+
+    if (body.address_line2 !== undefined) {
+      if (body.address_line2 !== null && (typeof body.address_line2 !== 'string' || body.address_line2.length > 255)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'address_line2' must be a string up to 255 characters or null." },
+        });
+      }
+      fields.address_line2 = body.address_line2 === null ? null : body.address_line2.trim();
+    }
+
+    if (body.city !== undefined) {
+      if (typeof body.city !== 'string' || body.city.trim().length === 0 || body.city.trim().length > 100) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'city' must be a non-empty string up to 100 characters." },
+        });
+      }
+      fields.city = body.city.trim();
+    }
+
+    if (body.state !== undefined) {
+      if (typeof body.state !== 'string' || body.state.trim().length === 0 || body.state.trim().length > 100) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'state' must be a non-empty string up to 100 characters." },
+        });
+      }
+      fields.state = body.state.trim();
+    }
+
+    if (body.postal_code !== undefined) {
+      if (body.postal_code !== null && (typeof body.postal_code !== 'string' || body.postal_code.length > 20)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'postal_code' must be a string up to 20 characters or null." },
+        });
+      }
+      fields.postal_code = body.postal_code === null ? null : body.postal_code.trim();
+    }
+
+    if (body.timezone !== undefined) {
+      if (typeof body.timezone !== 'string' || body.timezone.trim().length === 0 || body.timezone.trim().length > 50) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'timezone' must be a non-empty string up to 50 characters (e.g. 'Asia/Kolkata')." },
+        });
+      }
+      fields.timezone = body.timezone.trim();
+    }
+
+    if (body.latitude !== undefined) {
+      const lat = parseFloat(body.latitude);
+      if (Number.isNaN(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'latitude' must be a number between -90 and 90." },
+        });
+      }
+      fields.latitude = lat;
+    }
+
+    if (body.longitude !== undefined) {
+      const lng = parseFloat(body.longitude);
+      if (Number.isNaN(lng) || lng < -180 || lng > 180) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_FIELD', message: "'longitude' must be a number between -180 and 180." },
+        });
+      }
+      fields.longitude = lng;
+    }
+
+    if (body.status !== undefined) {
+      if (!ALLOWED_LOCATION_STATUSES.includes(body.status)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_FIELD',
+            message: `'status' must be one of: ${ALLOWED_LOCATION_STATUSES.join(', ')}.`,
+          },
+        });
+      }
+      fields.status = body.status;
+    }
+
+    // Require lat & lng to be updated together (PostGIS geometry consistency)
+    const hasLat = Object.prototype.hasOwnProperty.call(fields, 'latitude');
+    const hasLng = Object.prototype.hasOwnProperty.call(fields, 'longitude');
+    if (hasLat !== hasLng) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_FIELD',
+          message: "'latitude' and 'longitude' must be updated together.",
+        },
+      });
+    }
+
+    const updated = await operatorService.updateStation(id, fields);
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'STATION_NOT_FOUND',
+          message: `Station with ID '${id}' was not found.`,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

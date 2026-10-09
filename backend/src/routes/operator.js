@@ -7,6 +7,7 @@
  * - All routes are protected by authenticate (JWT cookie) and requireOperator middleware.
  * - Operators are strictly scoped to their assigned CPO. Cross-tenant queries are blocked.
  * - Driver accounts are rejected with 403 OPERATOR_ROLE_REQUIRED.
+ * - Per-station routes additionally use requireStationOperator for CPO ownership enforcement.
  */
 
 import { Router } from 'express';
@@ -15,9 +16,11 @@ import {
   getStationsHandler,
   getSessionsHandler,
   getAnalyticsHandler,
+  getStationDetailHandler,
+  updateStationHandler,
 } from '../controllers/operatorController.js';
 import { authenticate } from '../middleware/authenticate.js';
-import { requireOperator } from '../middleware/authorize.js';
+import { requireOperator, requireStationOperator } from '../middleware/authorize.js';
 
 const router = Router();
 
@@ -36,5 +39,11 @@ router.get('/sessions', getSessionsHandler);
 
 // GET /api/v1/operator/analytics  - Time-series buckets for energy and revenue curves
 router.get('/analytics', getAnalyticsHandler);
+
+// ── Phase 4C: Station Management ──────────────────────────────────────────────
+// GET  /api/v1/operator/stations/:id  - Full detail for a single owned station
+// PATCH /api/v1/operator/stations/:id - Update mutable metadata for an owned station
+router.get('/stations/:id', requireStationOperator, getStationDetailHandler);
+router.patch('/stations/:id', requireStationOperator, updateStationHandler);
 
 export default router;
