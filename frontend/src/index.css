@@ -289,8 +289,11 @@ input[type="range"]::-webkit-slider-thumb {
   color: #64748b !important;
 }
 
-/* ─── Light theme: dropdown suggestion hover items ─── */
-.light-theme [class*="hover:text-white"]:hover {
+/* ─── Light theme: ghost element hover ─── */
+/* Only remap hover:text-white on ghost/translucent elements (not solid-bg buttons) */
+.light-theme button[class*="hover:text-white"]:not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="from-sky-"]):not([class*="from-emerald-"]):hover,
+.light-theme a[class*="hover:text-white"]:hover,
+.light-theme div[class*="hover:text-white"]:hover {
   color: #0f172a !important;
 }
 .light-theme [class*="hover:bg-sky-500"]:hover {
@@ -441,8 +444,10 @@ input[type="range"]::-webkit-slider-thumb {
 .light-theme button[class*="bg-emerald-400/"] {
   color: #047857 !important;
 }
-.light-theme button[class*="text-sky-"],
-.light-theme button[class*="text-blue-"],
+/* Only tint sky/blue text on ghost or translucent buttons.
+   Exclude gradient buttons (from-sky-*) which already keep white text. */
+.light-theme button[class*="text-sky-"]:not([class*="from-sky-"]):not([class*="from-emerald-"]):not([class*="bg-gradient"]),
+.light-theme button[class*="text-blue-"]:not([class*="from-blue-"]):not([class*="bg-gradient"]),
 .light-theme button[class*="bg-sky-500/"],
 .light-theme button[class*="bg-sky-400/"] {
   color: #0284c7 !important;
@@ -520,9 +525,14 @@ input[type="range"]::-webkit-slider-thumb {
   color: #0f172a !important;
 }
 
-/* Translucent Containers & Inner Cards */
-.light-theme div[class*="bg-white\/\[\.0"],
-.light-theme div[class*="bg-white\/\[\.1"] {
+/* Translucent Containers & Inner Cards
+   Scope to direct children of glass/panel-surface and exclude
+   small inner-metric divs, badges, and alert boxes that should
+   stay transparent so they don't get inflated to 90% opaque white. */
+.light-theme .glass > div[class*="bg-white\/\[\.0"],
+.light-theme .glass > div[class*="bg-white\/\[\.1"],
+.light-theme .panel-surface > div[class*="bg-white\/\[\.0"],
+.light-theme .panel-surface > div[class*="bg-white\/\[\.1"] {
   background-color: rgba(248, 250, 252, 0.9) !important;
   border-color: rgba(226, 232, 240, 0.95) !important;
 }
