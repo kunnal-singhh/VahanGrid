@@ -64,10 +64,13 @@ export default function EditTariffModal({
   });
 
   const [initialData, setInitialData] = useState(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(null);
+
+  const draftKey = `vahangrid_draft_tariff_${tariff?.id || 'new'}`;
 
   // Load operator stations fleet for the location scope selector
   useEffect(() => {
@@ -91,7 +94,7 @@ export default function EditTariffModal({
     };
   }, []);
 
-  // Set initial data on mount / tariff change
+  // Set initial data on mount / tariff change and restore preserved draft
   useEffect(() => {
     const init = {
       name: tariff?.name || '',
@@ -108,9 +111,29 @@ export default function EditTariffModal({
       valid_from: tariff?.valid_from ? new Date(tariff.valid_from).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       valid_to: tariff?.valid_to ? new Date(tariff.valid_to).toISOString().slice(0, 16) : '',
     };
-    setFormData(init);
+
+    let formToUse = init;
+    let isRestored = false;
+    try {
+      const savedDraft = sessionStorage.getItem(draftKey);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        const hasDiff = Object.keys(parsed).some(
+          (k) => String(parsed[k] ?? '').trim() !== String(init[k] ?? '').trim()
+        );
+        if (hasDiff) {
+          formToUse = { ...init, ...parsed };
+          isRestored = true;
+        }
+      }
+    } catch (e) {
+      console.warn('[EditTariffModal] Error reading draft from sessionStorage:', e);
+    }
+
+    setFormData(formToUse);
     setInitialData(init);
-  }, [tariff]);
+    setDraftRestored(isRestored);
+  }, [tariff, draftKey]);
 
   // Handle escape key
   useEffect(() => {
@@ -135,7 +158,47 @@ export default function EditTariffModal({
     return changes;
   }, [formData, initialData, isEdit]);
 
-  const hasChanges = isEdit ? Object.keys(dirtyFields).length > 0 : true;
+  const hasChanges = isEdit
+    ? Object.keys(dirtyFields).length > 0
+    : Boolean(formData.name.trim() || formData.description.trim() || formData.location_id);
+
+  // Persist unsaved draft to sessionStorage across page refreshes
+  useEffect(() => {
+    if (!draftKey || !initialData) return;
+    try {
+      if (hasChanges) {
+        sessionStorage.setItem(draftKey, JSON.stringify(formData));
+      } else {
+        sessionStorage.removeItem(draftKey);
+      }
+    } catch (e) {
+      console.warn('[EditTariffModal] Failed to persist draft to sessionStorage:', e);
+    }
+  }, [draftKey, formData, initialData, hasChanges]);
+
+  // Warn before browser unload if there are unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  const handleDiscardDraft = () => {
+    try {
+      sessionStorage.removeItem(draftKey);
+    } catch (_) {}
+    if (initialData) {
+      setFormData(initialData);
+    }
+    setDraftRestored(false);
+    setFieldErrors({});
+    setSubmitError(null);
+  };
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -246,6 +309,10 @@ export default function EditTariffModal({
 
         const updated = await tariffService.updateTariff(tariff.id, payload);
         setSubmitSuccess('Tariff plan updated successfully!');
+        try {
+          sessionStorage.removeItem(draftKey);
+        } catch (_) {}
+        setDraftRestored(false);
         if (onTariffSaved) onTariffSaved(updated);
         setTimeout(() => onClose(), 600);
       } else {
@@ -268,6 +335,10 @@ export default function EditTariffModal({
 
         const created = await tariffService.createTariff(payload);
         setSubmitSuccess('New tariff plan created successfully!');
+        try {
+          sessionStorage.removeItem(draftKey);
+        } catch (_) {}
+        setDraftRestored(false);
         if (onTariffSaved) onTariffSaved(created);
         setTimeout(() => onClose(), 600);
       }
@@ -351,6 +422,22 @@ export default function EditTariffModal({
         {/* ── Modal Body / Form ── */}
         <div className="px-6 py-5 overflow-y-auto space-y-5 flex-1">
           {/* Feedback Banners */}
+          {draftRestored && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center justify-between gap-3 animate-fade-in">
+              <div className="flex items-center gap-2 min-w-0">
+                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">Unsaved tariff edits restored from previous session.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 transition-colors cursor-pointer shrink-0"
+              >
+                Discard Draft
+              </button>
+            </div>
+          )}
+
           {submitSuccess && (
             <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2 animate-fade-in">
               <CheckCircle2 className="w-4 h-4 shrink-0" />

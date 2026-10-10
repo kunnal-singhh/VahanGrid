@@ -67,7 +67,7 @@ export default function RemoteStopConfirmModal({
       }
       setTimeout(() => {
         onClose();
-      }, 1500);
+      }, 2500);
     } catch (err) {
       console.error('[RemoteStopConfirmModal] Remote stop failed:', err);
       let errorMsg = err.message || 'Remote stop failed to execute.';
@@ -135,15 +135,22 @@ export default function RemoteStopConfirmModal({
 
         {/* Content */}
         <div className="p-6 space-y-5 overflow-y-auto">
-          {/* Success Banner */}
+          {/* Success Banner distinguishing command dispatch vs confirmed termination */}
           {successResult && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-3 animate-fade-in">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              <div>
-                <p className="font-bold text-sm">Session Stopped Successfully</p>
-                <p className="text-[11px] mt-0.5 text-emerald-400/80">
-                  Transaction terminated. Authoritative CDR generated and queued for settlement.
-                </p>
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-2 animate-fade-in">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <p className="font-bold text-sm">Remote Stop Succeeded</p>
+              </div>
+              <div className="pl-7 space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-emerald-400 font-bold">•</span>
+                  <span><strong>Command Dispatched:</strong> OCPP RequestStopTransaction was delivered and accepted by charging point hardware.</span>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-emerald-400 font-bold">•</span>
+                  <span><strong>Termination Confirmed:</strong> Session transitioned to stopped; final energy reading recorded and authoritative CDR finalized for wallet settlement.</span>
+                </div>
               </div>
             </div>
           )}
@@ -256,7 +263,7 @@ export default function RemoteStopConfirmModal({
             ) : successResult ? (
               <>
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Command Accepted</span>
+                <span>Dispatched & Confirmed</span>
               </>
             ) : (
               <>

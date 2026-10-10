@@ -60,12 +60,15 @@ export default function EditStationModal({
   });
 
   const [initialData, setInitialData] = useState(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(null);
 
-  // Fetch single station detail on mount
+  const draftKey = stationId ? `vahangrid_draft_station_${stationId}` : null;
+
+  // Fetch single station detail on mount & check for saved drafts
   useEffect(() => {
     let isMounted = true;
 
@@ -90,8 +93,31 @@ export default function EditStationModal({
           latitude: data.latitude != null ? String(data.latitude) : '',
           longitude: data.longitude != null ? String(data.longitude) : '',
         };
-        setFormData(initial);
+
+        // Check for preserved unsaved draft in sessionStorage across refreshes
+        let formToUse = initial;
+        let isRestored = false;
+        if (draftKey) {
+          try {
+            const savedDraft = sessionStorage.getItem(draftKey);
+            if (savedDraft) {
+              const parsed = JSON.parse(savedDraft);
+              const hasDiff = Object.keys(parsed).some(
+                (k) => String(parsed[k] ?? '').trim() !== String(initial[k] ?? '').trim()
+              );
+              if (hasDiff) {
+                formToUse = { ...initial, ...parsed };
+                isRestored = true;
+              }
+            }
+          } catch (e) {
+            console.warn('[EditStationModal] Error reading draft from sessionStorage:', e);
+          }
+        }
+
+        setFormData(formToUse);
         setInitialData(initial);
+        setDraftRestored(isRestored);
       } catch (err) {
         if (!isMounted) return;
         console.error('[EditStationModal] Failed to fetch station:', err);
@@ -106,7 +132,7 @@ export default function EditStationModal({
     return () => {
       isMounted = false;
     };
-  }, [stationId]);
+  }, [stationId, draftKey]);
 
   // Handle escape key
   useEffect(() => {
@@ -132,6 +158,46 @@ export default function EditStationModal({
   }, [formData, initialData]);
 
   const hasChanges = Object.keys(dirtyFields).length > 0;
+
+  // Persist unsaved draft to sessionStorage across page refreshes
+  useEffect(() => {
+    if (!draftKey || !initialData) return;
+    try {
+      if (hasChanges) {
+        sessionStorage.setItem(draftKey, JSON.stringify(formData));
+      } else {
+        sessionStorage.removeItem(draftKey);
+      }
+    } catch (e) {
+      console.warn('[EditStationModal] Failed to persist draft to sessionStorage:', e);
+    }
+  }, [draftKey, formData, initialData, hasChanges]);
+
+  // Warn before browser unload if there are unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  const handleDiscardDraft = () => {
+    if (draftKey) {
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch (_) {}
+    }
+    if (initialData) {
+      setFormData(initialData);
+    }
+    setDraftRestored(false);
+    setFieldErrors({});
+    setSubmitError(null);
+  };
 
   // Form field change handler
   const handleChange = (field, value) => {
@@ -257,6 +323,12 @@ export default function EditStationModal({
     try {
       const updated = await operatorService.updateStation(stationId, payload);
       setSubmitSuccess('Station metadata updated successfully!');
+      if (draftKey) {
+        try {
+          sessionStorage.removeItem(draftKey);
+        } catch (_) {}
+      }
+      setDraftRestored(false);
       setInitialData({
         ...formData,
         latitude: String(payload.latitude ?? formData.latitude),
@@ -444,6 +516,22 @@ export default function EditStationModal({
           ) : (
             <>
               {/* Feedback Banners */}
+              {draftRestored && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center justify-between gap-3 animate-fade-in">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="truncate">Unsaved station edits restored from previous session.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 transition-colors cursor-pointer shrink-0"
+                  >
+                    Discard Draft
+                  </button>
+                </div>
+              )}
+
               {submitSuccess && (
                 <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2 animate-fade-in">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
