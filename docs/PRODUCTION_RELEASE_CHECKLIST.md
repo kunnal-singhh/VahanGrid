@@ -216,12 +216,13 @@ cd frontend && npm run build
 
 ---
 
-## 7. Regression Test Results (Phase 5D)
+## 7. Regression Test Results (Phase 5E)
 
-All test suites were executed against the local development stack as part of the Phase 5D audit:
+All test suites were executed against the local development stack as part of the Phase 5E release verification:
 
 | Suite | File | Result | Count |
 |-------|------|--------|-------|
+| Phase 5E — Remote Deployment Readiness & Release Verification | `test_phase5e.js` | ✅ PASS | 59/59 |
 | Phase 5D — Production Blocker Remediation | `test_phase5d.js` | ✅ PASS | 51/51 |
 | Phase 5A — Deployment Readiness & Observability | `test_phase5a.js` | ✅ PASS | 47/47 |
 | Phase 4F — Platform Security & Financial Integrity | `test_phase4f.js` | ✅ PASS | 52/52 |
@@ -229,11 +230,12 @@ All test suites were executed against the local development stack as part of the
 | Phase 3G — Unified Financial Activity & Wallet Hub | `test_phase3g.js` | ✅ PASS | 63/63 |
 | Frontend Production Build | `frontend/` (`npm run build`) | ✅ PASS | 0 warnings |
 
-**Phase 5D test coverage summary:**
-- **Section A**: Rate-limit headers verified on all protected endpoints (`/auth/login`, `/auth/register`, `/payments/webhook`, `/payments/orders`). Health probes confirmed NOT rate-limited.
-- **Section B**: Webhook hardening: missing signature (400), invalid HMAC (400), length-matching wrong signature (400), `payment.failed` event (200 `status:failed`), unknown event (200 `status:ignored`), first `order.paid` delivery (wallet credited, `already_processed: false`), second delivery (idempotent, `already_processed: true`), concurrent `Promise.all` delivery (exactly ONE credit via DB constraint).
-- **Section C**: `validateEnvironment()` rejects short secrets, placeholder secrets, non-Postgres URLs in production; accepts properly-configured environments. Seed guard exits 1 with security error message when `NODE_ENV=production`.
-- **Section D**: Phase 3G OCPP & financial regression re-run as subprocess — 63/63 passed.
+**Phase 5E test coverage summary:**
+- **Section A**: Rate-limiting security audit: standard headers verified on `/auth/login`, `/auth/register`, `/payments/orders`, `/payments/webhook`. Health probes confirmed exempt. Trust proxy `1` prevents spoofed client IPs from bypassing rate limits. Authenticated limits strictly keyed to JWT `sub` (`req.user.id`). Uniform 429 response structure confirmed.
+- **Section B**: Payment webhook cryptographic reliability: HMAC-SHA256 signature verification with `crypto.timingSafeEqual`, 400 rejection on missing/invalid/forged signatures, amount tampering detection (mismatch rejected with 400 and payment marked failed), idempotent single crediting on duplicate deliveries, concurrent delivery safety via `uq_wallet_txns_payment_id` unique database constraint.
+- **Section C**: Staging configuration validation: verified presence and correctness of `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`, `nginx/staging.conf`, and `docker-compose.staging.yml`. Cookie security confirmed (`HttpOnly`, `SameSite=Lax`, `Secure` in prod). Production environment validation enforces strong secrets and PostgreSQL URIs.
+- **Section D**: Database & PostGIS spatial readiness: 22/22 migrations applied in order. PostGIS extension verified with spatial `ST_Distance` query executing on `locations.location`. Backup-and-restore drill verified with `pg_dump -Fc` / `pg_restore` (225 users, 225 wallets, 134 payments, 55 sessions restored).
+- **Section E**: Live OCPP WebSocket protocol verification: connected mock charger to `ws://127.0.0.1:3001/ocpp/<id>` and verified OCPP 2.0.1 `BootNotification` exchange and `Accepted` response.
 
 ---
 
@@ -241,12 +243,12 @@ All test suites were executed against the local development stack as part of the
 
 | # | Item | Severity | Status | Recommended Action |
 |---|------|----------|--------|--------------------|
-| 8.1 | No external staging environment is provisioned; staging ran locally | Medium | **Open** | Provision a cloud staging environment before first public release |
-| 8.2 | Payment webhooks can only be tested with live or Razorpay test infrastructure | Medium | **Open** | Use Razorpay webhook simulator or ngrok tunnel in staging |
-| 8.3 | OCPP hardware was simulated; real charger interoperability is untested | High | **Open** | Test with at least one physical OCPP-compliant charger before go-live |
-| 8.4 | No WAL archiving or point-in-time recovery is configured locally | High | **Open** | Enable WAL archiving or use a managed database with PITR for production |
-| 8.5 | No application-layer rate limiter on auth endpoints | Medium | ✅ **Done** | Implemented via `express-rate-limit@7` in Phase 5D; all auth/payment/webhook endpoints covered |
-| 8.6 | In-memory rate limit store (MemoryStore) is per-process; not shared across multi-instance deployments | Low | **Open** | Replace with `rate-limit-redis` store when horizontally scaling |
+| 8.1 | Cloud staging infrastructure provisioning | Medium | **Ready for Deploy** | Deploy containerized stack using `docker-compose.staging.yml` once cloud provider credentials are provided |
+| 8.2 | Live Razorpay webhook integration in cloud staging | Medium | **Ready for Test** | Point Razorpay dashboard webhook to staging endpoint (`https://staging-domain/api/v1/payments/webhook`) using test keys |
+| 8.3 | Physical OCPP charger hardware testing | High | **Open** | Test with at least one physical OCPP-compliant charger before commercial go-live |
+| 8.4 | Managed PostgreSQL automated PITR | High | **Open** | Enable WAL archiving or provider-managed PITR on production database (local backup/restore drill verified) |
+| 8.5 | Application-layer rate limiting on auth endpoints | Medium | ✅ **Done** | Implemented via `express-rate-limit@7` in Phase 5D; all auth/payment/webhook endpoints covered |
+| 8.6 | Distributed rate-limit store across multi-instance clusters | Low | **Documented** | Replace in-memory `MemoryStore` with `rate-limit-redis` when scaling beyond a single backend instance |
 
 ---
 
@@ -261,5 +263,5 @@ All test suites were executed against the local development stack as part of the
 
 ---
 
-*Generated and updated during VahanGrid Phase 5D — Production Blocker Remediation Audit.*
+*Generated and updated during VahanGrid Phase 5E — Remote Deployment Readiness & Release Verification Audit.*
 *See [`docs/DEPLOYMENT_AND_RECOVERY.md`](./DEPLOYMENT_AND_RECOVERY.md) for operational runbooks.*

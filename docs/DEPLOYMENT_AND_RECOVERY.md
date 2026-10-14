@@ -425,4 +425,59 @@ dropdb -h <db_host> -U <db_user> vahangrid_restore_test
 
 ---
 
-*Last updated: 2026-10-15 — Phase 5D Production Blocker Remediation.*
+## 9. Phase 5E — Remote Deployment Readiness & Release Verification (2026-10-15)
+
+### 9.1 Reproducible Containerized Staging Architecture
+
+A complete, multi-container staging stack is defined in the repository:
+- **`backend/Dockerfile`**: Multi-stage Node 20 Alpine container running as an unprivileged system user (`vahangrid`). Emits Docker health checks against `/health/liveness`.
+- **`frontend/Dockerfile`**: Multi-stage build producing production Vite assets served by NGINX 1.27 Alpine. Includes immutable asset caching and SPA routing fallback.
+- **`frontend/nginx.conf`**: Configures gzip compression, 1-year immutable cache on `/assets/`, and `try_files $uri $uri/ /index.html` to prevent 404s on browser refreshes.
+- **`nginx/staging.conf`**: Production-grade reverse proxy and TLS terminator.
+  - Terminates TLS with modern cipher suites and security headers (HSTS, X-Frame-Options, CSP, MIME-sniffing protection).
+  - Routes `/health` directly to backend without rate-limiting.
+  - Proxies `/api/v1/` with sanitized reverse proxy headers (`Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`).
+  - Supports bidirectional WebSocket upgrades for `/ocpp/` with a 3600-second read timeout for continuous charger heartbeats.
+  - Proxies SPA traffic to the frontend container.
+- **`docker-compose.staging.yml`**: Bridges PostGIS 16-3.4, automated migration container, backend API, frontend SPA, and NGINX on an isolated Docker network.
+
+### 9.2 Rate-Limiting Security Audit Findings
+
+| Area | Implementation & Verification | Assessment |
+|------|------------------------------|------------|
+| **IP Spoofing Defense** | Configured via `app.set('trust proxy', config.trustProxy)`. In production, defaults to `1` (single reverse proxy hop). Express ignores client-injected `X-Forwarded-For` entries and relies strictly on the hop appended by NGINX. | ✅ Verified Secure |
+| **Authenticated User Limits** | `paymentOrderLimiter` and `paymentVerifyLimiter` extract `req.user.id` populated by the `authenticate` JWT middleware. Client request bodies or query params attempting to provide alternate `user_id` values cannot bypass user quotas. | ✅ Verified Secure |
+| **Probe Exemption** | `/health`, `/health/liveness`, `/health/readiness` are mounted prior to `globalApiLimiter`. Container health probes and ALB liveness checks never consume rate-limit budget. | ✅ Verified Exempt |
+| **429 Response Contract** | Standardized JSON contract: `{ success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: '...' } }`. | ✅ Verified Uniform |
+| **Store Topology** | Default `MemoryStore` is per-process. Counters reset upon process restarts. For multi-pod or multi-server scaling, migrate to `rate-limit-redis`. | ⚠️ Documented Single-Node Constraint |
+
+### 9.3 Payment Webhook Reliability & Cryptographic Hardening
+
+- **HMAC Verification**: Raw body buffer preserved via `express.json({ verify: ... })`. Verified using `crypto.timingSafeEqual` to eliminate timing side-channel attacks.
+- **Amount Tampering Detection**: The webhook handler verifies that gateway reported amounts match the authoritative DB order amount within ₹0.01 tolerance. Discrepancies mark the payment order as `failed` with code `AMOUNT_TAMPERING_DETECTED` and return HTTP 400.
+- **Idempotency & Concurrency**:
+  - `creditWalletForPayment` uses row-level locking (`SELECT ... FOR UPDATE`) on the payment and wallet records.
+  - Duplicate webhooks return HTTP 200 with `already_processed: true` without double-crediting.
+  - Database unique index `uq_wallet_txns_payment_id` intercepts concurrent `Promise.all` deliveries, ensuring exactly one ledger transaction commits.
+- **Retry Tolerance**: Gateway retries during transient database outages roll back cleanly without partial ledger writes. Subsequent retries succeed and credit the driver's wallet.
+
+### 9.4 Database & PostGIS Verification Evidence
+
+- **Migration Ordering**: All 22 migration scripts (`001_create_extensions.sql` through `022_add_user_roles_and_cpo_association.sql`) executed in order against a clean PostgreSQL 18 instance with zero schema errors.
+- **Backup & Restore Drill**:
+  - Generated compressed dump using `pg_dump -Fc -Z 9` (164,611 bytes).
+  - Restored to an isolated database `vahangrid_restore_drill` via `pg_restore --clean --if-exists`.
+  - Confirmed 100% record restoration across all tables: 225 users, 225 wallets, 134 payments, 55 charging sessions, 50 CDRs, 24 OCPP charge points, 6 locations.
+  - Executed spatial PostGIS query: `ST_Distance(location, ST_SetSRID(ST_MakePoint(77.2090, 28.6139), 4326)::geography)` succeeded on restored `locations.location` geography column.
+
+### 9.5 OCPP WebSocket Protocol Verification
+
+- CSMS gateway tested via WebSocket connection (`ws://localhost:3001/ocpp/<chargePointId>`).
+- Validated OCPP 2.0.1 `BootNotification` message exchange:
+  - Charger sends CALL `[2, "<id>", "BootNotification", { "reason": "PowerUp", "chargingStation": { "model": "VG-DC-FAST", "vendorName": "VahanGrid" } }]`.
+  - Server accepts connection, registers charger state, and returns CALLRESULT `[3, "<id>", { "currentTime": "...", "interval": 300, "status": "Accepted" }]`.
+- Hardware caveat: Validation performed via WebSocket simulation. Physical interoperability testing with field hardware remains required prior to commercial go-live.
+
+---
+
+*Last updated: 2026-10-15 — Phase 5E Remote Deployment Readiness & Release Verification.*

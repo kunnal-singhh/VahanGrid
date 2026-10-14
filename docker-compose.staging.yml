@@ -1,0 +1,96 @@
+services:
+  # ── 1. PostgreSQL 16 with PostGIS 3.4 ───────────────────────────────────────
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vahangrid_staging
+      POSTGRES_USER: vahangrid_admin
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:-staging_secure_pass_replace_in_secrets}
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vahangrid_admin -d vahangrid_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal_net
+
+  # ── 2. Pre-deploy Schema Migrator ──────────────────────────────────────────
+  migration:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["node", "src/scripts/migrate.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://vahangrid_admin:${STAGING_DB_PASSWORD:-staging_secure_pass_replace_in_secrets}@db:5432/vahangrid_staging
+      JWT_SECRET: ${STAGING_JWT_SECRET:-staging_jwt_secret_must_be_minimum_32_characters_long_random_hex}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal_net
+
+  # ── 3. VahanGrid Backend API & OCPP Gateway ────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      TRUST_PROXY: "1"
+      DATABASE_URL: postgresql://vahangrid_admin:${STAGING_DB_PASSWORD:-staging_secure_pass_replace_in_secrets}@db:5432/vahangrid_staging
+      FRONTEND_URL: "https://${STAGING_DOMAIN:-staging.vahangrid.internal}"
+      JWT_SECRET: ${STAGING_JWT_SECRET:-staging_jwt_secret_must_be_minimum_32_characters_long_random_hex}
+      JWT_EXPIRES_IN: 7d
+      PAYMENT_PROVIDER: razorpay
+      PAYMENT_KEY_ID: ${STAGING_PAYMENT_KEY_ID:-rzp_test_staging}
+      PAYMENT_KEY_SECRET: ${STAGING_PAYMENT_KEY_SECRET:-staging_payment_secret_replace_in_env}
+      PAYMENT_WEBHOOK_SECRET: ${STAGING_PAYMENT_WEBHOOK_SECRET:-staging_webhook_secret_replace_in_env}
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    networks:
+      - internal_net
+
+  # ── 4. VahanGrid Frontend SPA ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_APP_NAME: "VahanGrid Staging"
+    restart: unless-stopped
+    networks:
+      - internal_net
+
+  # ── 5. NGINX Reverse Proxy & TLS Terminator ────────────────────────────────
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/staging.conf:/etc/nginx/conf.d/default.conf:ro
+      - certs_staging:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - internal_net
+
+networks:
+  internal_net:
+    driver: bridge
+
+volumes:
+  pgdata_staging:
+  certs_staging:

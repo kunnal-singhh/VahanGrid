@@ -20,7 +20,8 @@
     "test:phase4e": "node src/scripts/test_phase4e.js",
     "test:phase4f": "node src/scripts/test_phase4f.js",
     "test:phase5a": "node src/scripts/test_phase5a.js",
-    "test:phase5d": "node src/scripts/test_phase5d.js"
+    "test:phase5d": "node src/scripts/test_phase5d.js",
+    "test:phase5e": "node src/scripts/test_phase5e.js"
   },
   "engines": {
     "node": ">=18.0.0"
