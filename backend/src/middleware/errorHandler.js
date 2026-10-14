@@ -14,6 +14,7 @@
  */
 
 import config from '../config/env.js';
+import logger from '../utils/logger.js';
 
 /**
  * Normalize any thrown value into a safe, structured HTTP response.
@@ -28,12 +29,15 @@ export function errorHandler(err, req, res, _next) {
   // built-in errors (e.g. JSON parse failure = 400). Default to 500.
   const status = err.status || err.statusCode || 500;
 
-  // Log the full error server-side so we can debug it, but never send
-  // the raw error to the client in production.
-  console.error(`[error] ${req.method} ${req.path} → ${status}`, err.message);
-  if (config.isDev) {
-    console.error(err.stack);
-  }
+  // Log structured error server-side with sanitized context
+  logger.error('HTTP', `${req.method} ${req.path} → ${status}`, {
+    method: req.method,
+    path: req.path,
+    status,
+    message: err.message,
+    code: err.code,
+    ...(config.isDev && { stack: err.stack }),
+  });
 
   // ── Client-facing response ────────────────────────────────────────────────
   const isClientError = status >= 400 && status < 500;

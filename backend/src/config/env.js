@@ -20,33 +20,113 @@ import { dirname, resolve } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, '../../.env') });
 
-// ── Required variables ───────────────────────────────────────────────────────
-// If DATABASE_URL is missing, the backend cannot function — fail immediately
-// rather than hiding the problem until a database query is attempted.
-// JWT_SECRET is also required: without it the server cannot issue or verify tokens.
+// ── Required variables validation ───────────────────────────────────────────
 const REQUIRED = ['DATABASE_URL', 'JWT_SECRET'];
 
-const missing = REQUIRED.filter((key) => !process.env[key]);
-if (missing.length > 0) {
-  console.error(`[config] ❌ Missing required environment variables: ${missing.join(', ')}`);
-  console.error('[config]    Copy backend/.env.example to backend/.env and fill in the values.');
-  process.exit(1);
+const INSECURE_SECRET_PATTERNS = [
+  'secret',
+  'jwt_secret',
+  'change_this',
+  'changeme',
+  'test_secret',
+  'your_jwt_secret',
+  'vahangrid_secret',
+  '123456',
+  'password',
+];
+
+/**
+ * Validates environment configuration.
+ * Returns { valid: boolean, errors: string[], warnings: string[] }
+ *
+ * @param {object} [env=process.env]
+ * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
+ */
+export function validateEnvironment(env = process.env) {
+  const errors = [];
+  const warnings = [];
+
+  const isProd = env.NODE_ENV === 'production';
+
+  // 1. Check required presence
+  for (const key of REQUIRED) {
+    if (!env[key] || !env[key].trim()) {
+      errors.push(`Missing required environment variable: ${key}`);
+    }
+  }
+
+  // 2. Validate DATABASE_URL
+  if (env.DATABASE_URL) {
+    const dbUrl = env.DATABASE_URL.trim();
+    if (!dbUrl.startsWith('postgresql://') && !dbUrl.startsWith('postgres://')) {
+      errors.push("DATABASE_URL must start with 'postgresql://' or 'postgres://'");
+    }
+  }
+
+  // 3. Validate JWT_SECRET security in production
+  if (env.JWT_SECRET) {
+    const secret = env.JWT_SECRET.trim();
+    if (isProd) {
+      if (secret.length < 32) {
+        errors.push('In production, JWT_SECRET must be at least 32 characters long for cryptographic security.');
+      }
+      const lowerSecret = secret.toLowerCase();
+      if (INSECURE_SECRET_PATTERNS.some((p) => lowerSecret === p || lowerSecret.includes(p))) {
+        errors.push('In production, JWT_SECRET must not use obvious default or placeholder words.');
+      }
+    } else if (secret.length < 16) {
+      warnings.push('JWT_SECRET is shorter than 16 characters; consider using a longer secret.');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+// Run validation at startup
+const validation = validateEnvironment(process.env);
+if (!validation.valid) {
+  console.error(`[config] ❌ Environment configuration validation failed:`);
+  validation.errors.forEach((e) => console.error(`  - ${e}`));
+  console.error('[config]    Please check backend/.env against backend/.env.example and fix the above issues.');
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1);
+  }
+}
+if (validation.warnings.length > 0 && process.env.NODE_ENV !== 'test') {
+  validation.warnings.forEach((w) => console.warn(`[config] ⚠️  ${w}`));
 }
 
 // ── Exported configuration object ────────────────────────────────────────────
+const rawFrontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+const allowedOrigins = rawFrontendUrl.split(',').map((u) => u.trim()).filter(Boolean);
+
+// Trust proxy: 1 in production or if TRUST_PROXY is set to '1'/'true'/etc.
+let trustProxy = false;
+if (process.env.TRUST_PROXY !== undefined) {
+  const tp = process.env.TRUST_PROXY.toLowerCase();
+  trustProxy = tp === 'true' || tp === '1' ? 1 : tp === 'false' || tp === '0' ? false : process.env.TRUST_PROXY;
+} else if (process.env.NODE_ENV === 'production') {
+  trustProxy = 1;
+}
+
 const config = {
   port: parseInt(process.env.PORT, 10) || 3001,
   nodeEnv: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
   isProd: process.env.NODE_ENV === 'production',
+  trustProxy,
 
   database: {
     url: process.env.DATABASE_URL,
   },
 
   cors: {
-    // Default to localhost:5173 (Vite dev server) if FRONTEND_URL is not set.
-    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+    frontendUrl: allowedOrigins[0] || 'http://localhost:5173',
+    allowedOrigins,
   },
 
   jwt: {

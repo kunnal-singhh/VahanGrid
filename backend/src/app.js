@@ -21,10 +21,18 @@ import cookieParser from 'cookie-parser';
 
 import config from './config/env.js';
 import apiRoutes from './routes/index.js';
+import healthRouter from './routes/health.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
+
+// ── 0. Reverse proxy configuration ───────────────────────────────────────────
+// When running behind a reverse proxy (NGINX, Cloudflare, AWS ALB), trust proxy
+// ensures req.ip, req.protocol, and secure cookies evaluate correctly from X-Forwarded-* headers.
+if (config.trustProxy) {
+  app.set('trust proxy', config.trustProxy);
+}
 
 // ── 1. Security headers (Helmet) ─────────────────────────────────────────────
 // Helmet sets a collection of HTTP response headers that defend against common
@@ -34,14 +42,17 @@ app.use(helmet());
 
 // ── 2. CORS ───────────────────────────────────────────────────────────────────
 // Cross-Origin Resource Sharing: browsers block JS on domain A from calling
-// an API on domain B unless the API explicitly opts in. We only allow the
-// configured frontend URL, not all origins, because `origin: '*'` would allow
-// any website to call this API on behalf of logged-in users.
+// an API on domain B unless the API explicitly opts in.
+const corsOrigin =
+  config.cors.allowedOrigins && config.cors.allowedOrigins.length > 1
+    ? config.cors.allowedOrigins
+    : config.cors.frontendUrl;
+
 const corsOptions = {
-  origin: config.cors.frontendUrl,
+  origin: corsOrigin,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,        // Required if we later use HttpOnly cookie auth
+  credentials: true, // Required for HttpOnly cookie auth
 };
 app.use(cors(corsOptions));
 
@@ -58,17 +69,21 @@ app.use(express.json({
     req.rawBody = buf;
   },
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 // ── 5. Cookie parsing ─────────────────────────────────────────────────────────
 // Required to read the HTTP-only JWT cookie set during login.
 // The cookie name is configured in config/env.js (cookie.name).
 app.use(cookieParser());
 
-// ── 6. API routes ─────────────────────────────────────────────────────────────
+// ── 6. Health routes (Root & Versioned) ────────────────────────────────────────
+// Load balancers and container orchestrators often ping /health directly.
+app.use('/health', healthRouter);
+
+// ── 7. API routes ─────────────────────────────────────────────────────────────
 app.use('/api/v1', apiRoutes);
 
-// ── 7. 404 catch-all ─────────────────────────────────────────────────────────
+// ── 8. 404 catch-all ─────────────────────────────────────────────────────────
 // Any request that did not match a route above falls through to here.
 app.use(notFound);
 
