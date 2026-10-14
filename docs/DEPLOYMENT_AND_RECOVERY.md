@@ -231,3 +231,46 @@ server {
     }
 }
 ```
+
+---
+
+## 7. Staging Environment Validation & Browser Audit (Phase 5B)
+
+### 7.1 Staging Environment Topology
+- **Deployment Status**: Local Staging Environment executed and validated on `http://localhost:3001` (Backend API & OCPP WebSocket Gateway) and `http://localhost:5173` (Frontend SPA) powered by PostgreSQL 18 with PostGIS.
+- **Infrastructure Limitation**: No remote cloud hosting accounts (e.g. AWS, GCP, Vercel, Railway) are configured in the repository; no cloud staging was invented or fabricated.
+- **Separation of Environments**: Staging uses sandbox configuration and local development/seed accounts. Production checks enforce high-entropy secrets and fail fast if default credentials are used.
+
+### 7.2 Automated Verification Results
+- **Phase 5A Probes & Config**: `47/47 passed` (`npm run test:phase5a`).
+- **Phase 4F Platform Reliability**: `52/52 passed` (`npm run test:phase4f`).
+- **Phase 4E Operator Operations**: `42/42 passed` (`npm run test:phase4e`).
+- **Phase 3G Financial Activity Hub**: `63/63 passed` (`npm run test:phase3g`).
+- **Frontend Production Build**: `npm run build` compiled in 9.15s with zero chunk warnings.
+
+### 7.3 Real Browser Workflows Exercised
+Browser automation sessions were recorded and verified:
+1. **Driver Workflow (`priya.sharma@example.com`)**:
+   - Authentication via HTTP-only cookie `vg_token`.
+   - Driver Dashboard verified with active balance, SoC, and vehicle state.
+   - Live Stations view: opened station detail modal for BKC Mobility Hub, verified connector power ratings, pricing, and live status.
+   - VahanPass Wallet: verified current balance and ledger transaction list.
+   - Session History: verified past charging sessions and CDR settlement statuses.
+   - Role Enforcement: verified "Operator Portal" link is completely hidden for driver accounts.
+   - Theme Toggle: toggled dark/light theme seamlessly.
+   - Clean sign-out verified.
+2. **Operator Workflow (`operator.tata@example.com`)**:
+   - Authenticated as Tata Power Operator.
+   - Sidebar displayed "Network Operations" with "CPO" badge.
+   - Operator Portal verified with CPO context "Tata Power EZ Charge (TATA_EZ)" and real-time KPI cards.
+   - Station Fleet: inspected fleet inventory and opened Edit Station modal.
+   - Tariff Management: inspected tariff rules and opened Create Tariff modal.
+   - Session Monitoring: inspected live/completed sessions and verified driver PII is masked.
+   - Clean sign-out verified.
+3. **Platform Admin Workflow (`admin@vahangrid.com`)**:
+   - Authenticated as Platform Super Admin.
+   - Sidebar displayed "ADMIN" badge under Network Operations.
+   - Operator Portal verified with CPO scope dropdown ("Platform-Wide (All CPOs)").
+   - Selected specific CPO ("Tata Power EZ Charge") and verified dynamic fleet filtering.
+   - Clean sign-out verified.
+
