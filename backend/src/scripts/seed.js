@@ -26,6 +26,16 @@ if (!connectionString) {
   process.exit(1);
 }
 
+// ── Production Safeguard ───────────────────────────────────────────────────
+// Development seed data includes known, hardcoded demo credentials (e.g. Demo@1234).
+// Running this against a production database would introduce severe security vulnerabilities.
+if (config.isProd || process.env.NODE_ENV === 'production') {
+  console.error('\n❌ [seed] SECURITY ERROR: Seeding is strictly disabled in production mode!');
+  console.error('   Development seed files populate known demo credentials (e.g. Demo@1234).');
+  console.error('   To populate production data, use authoritative onboarding procedures.\n');
+  process.exit(1);
+}
+
 const seedsDir = path.resolve(__dirname, '../../database/seeds');
 
 async function runSeeds() {
