@@ -216,12 +216,13 @@ cd frontend && npm run build
 
 ---
 
-## 7. Regression Test Results (Phase 5E)
+## 7. Regression Test Results (Phase 5F)
 
-All test suites were executed against the local development stack as part of the Phase 5E release verification:
+All test suites were executed against the local development stack as part of the Phase 5F integration verification:
 
 | Suite | File | Result | Count |
 |-------|------|--------|-------|
+| Phase 5F — Cloud Staging & Integration Verification | `test_phase5f.js` | ✅ PASS | 53/53 |
 | Phase 5E — Remote Deployment Readiness & Release Verification | `test_phase5e.js` | ✅ PASS | 59/59 |
 | Phase 5D — Production Blocker Remediation | `test_phase5d.js` | ✅ PASS | 51/51 |
 | Phase 5A — Deployment Readiness & Observability | `test_phase5a.js` | ✅ PASS | 47/47 |
@@ -230,12 +231,12 @@ All test suites were executed against the local development stack as part of the
 | Phase 3G — Unified Financial Activity & Wallet Hub | `test_phase3g.js` | ✅ PASS | 63/63 |
 | Frontend Production Build | `frontend/` (`npm run build`) | ✅ PASS | 0 warnings |
 
-**Phase 5E test coverage summary:**
-- **Section A**: Rate-limiting security audit: standard headers verified on `/auth/login`, `/auth/register`, `/payments/orders`, `/payments/webhook`. Health probes confirmed exempt. Trust proxy `1` prevents spoofed client IPs from bypassing rate limits. Authenticated limits strictly keyed to JWT `sub` (`req.user.id`). Uniform 429 response structure confirmed.
-- **Section B**: Payment webhook cryptographic reliability: HMAC-SHA256 signature verification with `crypto.timingSafeEqual`, 400 rejection on missing/invalid/forged signatures, amount tampering detection (mismatch rejected with 400 and payment marked failed), idempotent single crediting on duplicate deliveries, concurrent delivery safety via `uq_wallet_txns_payment_id` unique database constraint.
-- **Section C**: Staging configuration validation: verified presence and correctness of `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`, `nginx/staging.conf`, and `docker-compose.staging.yml`. Cookie security confirmed (`HttpOnly`, `SameSite=Lax`, `Secure` in prod). Production environment validation enforces strong secrets and PostgreSQL URIs.
-- **Section D**: Database & PostGIS spatial readiness: 22/22 migrations applied in order. PostGIS extension verified with spatial `ST_Distance` query executing on `locations.location`. Backup-and-restore drill verified with `pg_dump -Fc` / `pg_restore` (225 users, 225 wallets, 134 payments, 55 sessions restored).
-- **Section E**: Live OCPP WebSocket protocol verification: connected mock charger to `ws://127.0.0.1:3001/ocpp/<id>` and verified OCPP 2.0.1 `BootNotification` exchange and `Accepted` response.
+**Phase 5F test coverage summary:**
+- **Section A**: Staging Container & Reverse Proxy Manifest Audit: parsed and verified `docker-compose.staging.yml`, `backend/Dockerfile` (unprivileged `vahangrid` user, healthcheck on `/health/liveness`), `frontend/Dockerfile` and `frontend/nginx.conf` (`try_files $uri $uri/ /index.html` SPA routing), and `nginx/staging.conf` (TLSv1.2/1.3, security headers, `/ocpp/` WebSocket upgrade with 3600s read timeout, proxy headers).
+- **Section B**: Safe Failure Behavior & Security Boundaries: verified 401 on missing/expired/forged JWT, 403 `OPERATOR_ROLE_REQUIRED` on driver accessing operator endpoints, 403 `CPO_ACCESS_DENIED` on cross-CPO access, and verified IDOR protection.
+- **Section C**: Payment Sandbox Security: ₹10 min and ₹50,000 max bounds enforced, key secret non-leakage, HMAC-SHA256 signature enforcement, and idempotent single-crediting on duplicate/concurrent deliveries.
+- **Section D**: OCPP WebSocket Connection & Reconnection Resilience: verified mock charger connection, OCPP 2.0.1 `BootNotification` exchange with `Accepted` response, clean disconnect, and successful reconnect with PostgreSQL state tracking updated to `online`.
+- **Section E**: Database PostGIS Spatial Integrity: 22/22 migrations confirmed present, PostGIS extension verified active, and spatial geography `ST_Distance` calculations validated.
 
 ---
 
@@ -263,5 +264,5 @@ All test suites were executed against the local development stack as part of the
 
 ---
 
-*Generated and updated during VahanGrid Phase 5E — Remote Deployment Readiness & Release Verification Audit.*
+*Generated and updated during VahanGrid Phase 5F — Cloud Staging Deployment & Integration Verification Audit.*
 *See [`docs/DEPLOYMENT_AND_RECOVERY.md`](./DEPLOYMENT_AND_RECOVERY.md) for operational runbooks.*

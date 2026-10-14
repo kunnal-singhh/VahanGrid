@@ -480,4 +480,71 @@ A complete, multi-container staging stack is defined in the repository:
 
 ---
 
-*Last updated: 2026-10-15 — Phase 5E Remote Deployment Readiness & Release Verification.*
+## 10. Phase 5F — Cloud Staging Deployment & Integration Verification (2026-10-15)
+
+### 10.1 Deployment Scope & Infrastructure Status
+- **Execution Mode**: **Locally Validated Container Architecture**.
+- **Remote Cloud Staging**: Not deployed remotely due to absence of authorized cloud provider credentials or accounts in the workspace. No live cloud resources, DNS entries, or billing accounts were modified or fabricated.
+- **Compose Configuration**: Validated via `docker compose -f docker-compose.staging.yml config`. Syntax, multi-stage builds, volume mounts, isolated network topologies, and inter-service dependency chains (`db: service_healthy` → `migration: service_completed_successfully` → `backend: service_started`) verified valid with 0 errors.
+
+### 10.2 Container Manifest & Network Isolation
+| Service | Image / Base | Internal Port | Host Port | Network | Health Check | Storage |
+|---|---|---|---|---|---|---|
+| `db` | `postgis/postgis:16-3.4-alpine` | `5432` | None | `vahangrid_internal_net` | `pg_isready -U vahangrid_admin -d vahangrid_staging` | `pgdata_staging` volume |
+| `migration` | `backend/Dockerfile` | N/A | None | `vahangrid_internal_net` | One-shot migration runner | Ephemeral |
+| `backend` | `backend/Dockerfile` (Node 20 Alpine) | `3001` | None | `vahangrid_internal_net` | `wget -q --spider http://127.0.0.1:3001/health/liveness` | Stateless |
+| `frontend` | `frontend/Dockerfile` (NGINX 1.27) | `80` | None | `vahangrid_internal_net` | NGINX process | Stateless |
+| `reverse-proxy` | `nginx:1.27-alpine` | `80`, `443` | `80`, `443` | `vahangrid_internal_net` | Ingress listener | `certs_staging` volume |
+
+### 10.3 Safe Failure Behavior Verification
+Comprehensive negative testing verified system resilience:
+- **Missing / Malformed Tokens**: `GET /api/v1/auth/me` without cookie returns HTTP 401 `MISSING_TOKEN`.
+- **Expired Tokens**: Expired JWT tokens return HTTP 401 `TOKEN_EXPIRED`.
+- **Forged Signatures**: Tokens signed with untrusted secrets return HTTP 401 `INVALID_TOKEN`.
+- **Cross-Role Denials**: Drivers attempting operator endpoints (`/operator/overview`) return HTTP 403 `OPERATOR_ROLE_REQUIRED`.
+- **Multi-Tenant Isolation**: Operators attempting access to competitor CPO resources return HTTP 403 `CPO_ACCESS_DENIED`.
+- **Payment Bounds**: Top-up requests for ₹0, under ₹10, or over ₹50,000 return HTTP 400 validation errors.
+- **Amount Tampering**: Payment webhooks reporting mismatched transaction amounts return HTTP 400 `AMOUNT_TAMPERING_DETECTED` and mark payment records as failed.
+- **Payment Webhook Idempotency**: Replayed `order.paid` webhooks return HTTP 200 with `already_processed: true` without double ledger credits.
+
+### 10.4 OCPP WebSocket Connection & Reconnection Resilience
+- Verified live WebSocket protocol handshake at `ws://127.0.0.1:3001/ocpp/<chargePointId>`.
+- Verified standard OCPP 2.0.1 `BootNotification` exchange: initial connection responds `Accepted` with 300s heartbeat interval.
+- Verified disconnect and reconnection behavior: mock charger cleanly reconnected and completed secondary BootNotification exchange; database state updated to `online`.
+
+### 10.5 Remote Cloud Staging Setup Checklist
+When authorized cloud access is provisioned, execute the following reproducible deployment steps:
+1. **Provision Remote Host**: Launch Ubuntu 22.04+ or Amazon Linux 2023 instance (minimum 2 vCPU, 4GB RAM) with Docker Engine and Docker Compose v2 installed.
+2. **Configure Security Group / Firewall**:
+   - Inbound: Allow TCP `80` (HTTP) and `443` (HTTPS) from authorized IPs or public web.
+   - Outbound: Allow all traffic.
+   - Internal ports `5432` and `3001` must NOT be exposed to the public internet.
+3. **Provision TLS Certificates**:
+   ```bash
+   certbot certonly --standalone -d staging.yourdomain.com
+   mkdir -p ./nginx/certs
+   cp /etc/letsencrypt/live/staging.yourdomain.com/fullchain.pem ./nginx/certs/staging.crt
+   cp /etc/letsencrypt/live/staging.yourdomain.com/privkey.pem ./nginx/certs/staging.key
+   ```
+4. **Set Staging Secrets**:
+   Create a secure `.env` on the staging host:
+   ```env
+   STAGING_DB_PASSWORD=<high-entropy-db-password>
+   STAGING_JWT_SECRET=<64-character-random-hex-secret>
+   STAGING_DOMAIN=staging.yourdomain.com
+   STAGING_PAYMENT_KEY_ID=rzp_test_<staging_key>
+   STAGING_PAYMENT_KEY_SECRET=<staging_payment_secret>
+   STAGING_PAYMENT_WEBHOOK_SECRET=<staging_webhook_secret>
+   ```
+5. **Launch Stack**:
+   ```bash
+   docker compose -f docker-compose.staging.yml up -d
+   ```
+6. **Verify Staging Readiness**:
+   ```bash
+   curl -fk https://staging.yourdomain.com/health/readiness
+   ```
+
+---
+
+*Last updated: 2026-10-15 — Phase 5F Cloud Staging Deployment & Integration Verification.*
