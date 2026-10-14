@@ -274,3 +274,155 @@ Browser automation sessions were recorded and verified:
    - Selected specific CPO ("Tata Power EZ Charge") and verified dynamic fleet filtering.
    - Clean sign-out verified.
 
+---
+
+## 8. Phase 5D — Production Blocker Remediation (2026-10-15)
+
+### 8.1 Application-Layer Rate Limiting
+
+**Implementation**: `backend/src/middleware/rateLimiter.js` using `express-rate-limit@7`.
+
+| Limiter | Endpoint(s) | Window | Prod Limit | Dev Limit | Key |
+|---------|-------------|--------|------------|-----------|-----|
+| `authLoginLimiter` | `POST /auth/login` | 15 min | 10 req | 50 req | IP |
+| `authRegisterLimiter` | `POST /auth/register` | 1 hour | 5 req | 30 req | IP |
+| `webhookLimiter` | `POST /payments/webhook` | 1 min | 200 req | 200 req | IP |
+| `paymentOrderLimiter` | `POST /payments/orders` | 1 hour | 10 req | 50 req | User ID |
+| `paymentVerifyLimiter` | `POST /payments/verify` | 1 hour | 20 req | 100 req | User ID |
+| `globalApiLimiter` | `ALL /api/v1/*` | 15 min | 500 req | 2000 req | IP |
+
+**Response headers**: All limiters emit RFC-compliant `RateLimit-Limit` and `RateLimit-Remaining` headers. Health endpoints (`/health/*`) are explicitly excluded.
+
+**429 response format** (consistent with VahanGrid error contract):
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "<human-readable reason>"
+  }
+}
+```
+
+**Multi-instance limitation**: The default `MemoryStore` is per-process. In a horizontally-scaled deployment (multiple Node.js instances, PM2 cluster mode, Kubernetes pods), counters are NOT shared. Upgrade to `rate-limit-redis` before going multi-instance:
+```bash
+npm install rate-limit-redis ioredis
+```
+```js
+import RedisStore from 'rate-limit-redis';
+// ...
+store: new RedisStore({ sendCommand: (...args) => redisClient.sendCommand(args) }),
+```
+
+**Proxy trust**: Rate limits key off `req.ip`. Set `TRUST_PROXY=true` in production when the backend sits behind NGINX/load balancer so Express uses `X-Forwarded-For` correctly (misconfiguration would share one bucket across all clients).
+
+### 8.2 Cloud Staging Readiness Prerequisites
+
+The following must be completed before a cloud staging environment can be provisioned:
+
+1. **Cloud account selection**: Choose a hosting provider (AWS, GCP, Railway, Render, DigitalOcean App Platform).
+2. **Managed PostgreSQL**: Provision a managed PostgreSQL 14+ instance with:
+   - Automated daily backups (≥7 day retention)
+   - Point-in-time recovery (PITR) enabled
+   - Connection pooling (PgBouncer or provider-native)
+   - TLS-only connections enforced
+3. **Environment variables**: Set all production secrets (high-entropy `JWT_SECRET`, real `PAYMENT_KEY_ID`, `PAYMENT_KEY_SECRET`, `PAYMENT_WEBHOOK_SECRET`) in the cloud provider's secrets store.
+4. **Container image**: Build the backend Docker image and push to a container registry:
+   ```dockerfile
+   FROM node:20-alpine
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci --omit=dev
+   COPY src/ ./src/
+   ENV NODE_ENV=production
+   CMD ["node", "src/server.js"]
+   ```
+5. **TRUST_PROXY**: Set `TRUST_PROXY=true` when behind a cloud load balancer.
+6. **Webhook tunnel**: Use Razorpay's test webhook sender or `ngrok http 3001` to expose the staging webhook endpoint for payment simulation.
+7. **Seed guard verification**: Confirm `npm run seed` exits with code 1 in the cloud environment before running migrations.
+8. **Migration before deploy**: Run `npm run migrate` as a pre-deploy step.
+
+### 8.3 OCPP Physical Charger Interoperability Test Plan
+
+Simulated OCPP testing (Phase 3D–4F) cannot substitute for real hardware validation. The following test plan applies when a physical OCPP 1.6J-compliant charger is available:
+
+#### Pre-conditions
+- Backend OCPP WebSocket server reachable at `wss://<staging-host>/ocpp/<charge-point-id>`
+- TLS certificate valid for the staging domain
+- Charger configured with backend URL and charge-point ID
+
+#### Test Cases
+
+| TC | Description | Expected Outcome |
+|----|-------------|-----------------|
+| TC-1 | **BootNotification**: Power on charger | Server responds `Accepted`, status logs to `charge_point_status` |
+| TC-2 | **Heartbeat interval**: Charger sends periodic heartbeats | Server acknowledges each; orphan session recovery not triggered within normal intervals |
+| TC-3 | **StatusNotification**: Connector plug-in/out | Connector status transitions `Available → Preparing → Charging → Finishing → Available` recorded |
+| TC-4 | **StartTransaction**: Driver presents RFID or app-initiated remote start | Server sends `RemoteStartTransaction`, charger starts session, `StartTransaction.req` received, session created in DB |
+| TC-5 | **MeterValues**: Charger sends live energy readings | Values stored in `ocpp_meter_values`, SoC updates propagated |
+| TC-6 | **StopTransaction**: Driver stops session | `StopTransaction.req` received, CDR generated with correct kWh and cost |
+| TC-7 | **RemoteStop**: Operator initiates remote stop via Portal | Server sends `RemoteStopTransaction`, charger stops, CDR created |
+| TC-8 | **Power-loss recovery**: Kill and restart charger mid-session | Server detects orphaned `CHARGING` session after heartbeat timeout; CDR created with last known meter value |
+| TC-9 | **CDR settlement**: Driver's wallet balance deducted correctly | CDR status changes `PENDING → SETTLED`; wallet transaction recorded; balance matches cost |
+| TC-10 | **Tariff enforcement**: Verify kWh rate applied from active tariff | CDR `total_cost = energy_kwh × tariff_rate_perkwh` within floating-point tolerance |
+
+#### Acceptance Criteria
+- All TC-1 through TC-10 pass without server errors
+- No orphaned database records (sessions stuck in `CHARGING`, payments stuck in `created`)
+- OCPP message logs reviewed for protocol compliance (no `CallerError` or `CallError` responses)
+
+### 8.4 Database Backup & Restore Verification
+
+> [!NOTE]
+> The procedures below require `pg_dump` and `pg_restore` to be available in the environment. Run against the **staging** database, not production.
+
+#### Backup
+```bash
+# Full custom-format compressed dump (recommended for pg_restore)
+pg_dump \
+  -h <db_host> -U <db_user> -d vahangrid \
+  -Fc -Z 9 \
+  -f "vahangrid_backup_$(date +%Y%m%d_%H%M%S).dump"
+
+# Verify dump integrity
+pg_restore --list "vahangrid_backup_<timestamp>.dump" | head -20
+```
+
+#### Restore to isolated test database
+```bash
+# 1. Create a clean restore target
+createdb -h <db_host> -U <db_user> vahangrid_restore_test
+
+# 2. Restore
+pg_restore \
+  -h <db_host> -U <db_user> \
+  -d vahangrid_restore_test \
+  --clean --if-exists -v \
+  "vahangrid_backup_<timestamp>.dump"
+
+# 3. Spot-check critical tables
+psql -h <db_host> -U <db_user> -d vahangrid_restore_test \
+  -c "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM wallets; SELECT COUNT(*) FROM payments;"
+
+# 4. Verify migration tracking table is intact
+psql -h <db_host> -U <db_user> -d vahangrid_restore_test \
+  -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
+
+# 5. Clean up test database
+dropdb -h <db_host> -U <db_user> vahangrid_restore_test
+```
+
+#### Point-in-Time Recovery (PITR) prerequisites
+- `wal_level = replica` in `postgresql.conf`
+- `archive_mode = on` with `archive_command` writing WAL segments to durable storage (S3, GCS, etc.)
+- For managed databases: enable PITR in provider settings (AWS RDS, Google Cloud SQL, Railway, etc.)
+
+#### RTO / RPO targets
+| Target | Value | Notes |
+|--------|-------|-------|
+| RPO (data loss tolerance) | ≤5 minutes | Achievable with WAL archiving every 5 min or managed PITR |
+| RTO (recovery time) | ≤30 minutes | `pg_restore` on typical VahanGrid dataset + migration verification |
+
+---
+
+*Last updated: 2026-10-15 — Phase 5D Production Blocker Remediation.*

@@ -21,17 +21,23 @@ import {
   listPaymentsHandler,
 } from '../controllers/paymentController.js';
 import { authenticate } from '../middleware/authenticate.js';
+import {
+  webhookLimiter,
+  paymentOrderLimiter,
+  paymentVerifyLimiter,
+} from '../middleware/rateLimiter.js';
 
 const router = Router();
 
 // 1. Webhook endpoint (MUST NOT require JWT authentication; verified via gateway signature)
-router.post('/webhook', webhookHandler);
+//    webhookLimiter: CPU-exhaustion backstop. HMAC verification is the real cryptographic guard.
+router.post('/webhook', webhookLimiter, webhookHandler);
 
 // 2. Authenticated endpoints
 router.use(authenticate);
 
-router.post('/orders', createOrderHandler);
-router.post('/verify', verifyPaymentHandler);
+router.post('/orders', paymentOrderLimiter, createOrderHandler);
+router.post('/verify', paymentVerifyLimiter, verifyPaymentHandler);
 router.get('/', listPaymentsHandler);
 router.get('/:id', getPaymentHandler);
 

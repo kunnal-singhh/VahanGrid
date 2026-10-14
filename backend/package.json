@@ -19,7 +19,8 @@
     "test:phase4d": "node src/scripts/test_phase4d.js",
     "test:phase4e": "node src/scripts/test_phase4e.js",
     "test:phase4f": "node src/scripts/test_phase4f.js",
-    "test:phase5a": "node src/scripts/test_phase5a.js"
+    "test:phase5a": "node src/scripts/test_phase5a.js",
+    "test:phase5d": "node src/scripts/test_phase5d.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -30,6 +31,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.5.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",

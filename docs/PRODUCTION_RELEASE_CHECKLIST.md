@@ -1,4 +1,4 @@
-﻿# VahanGrid — Production Release Checklist
+# VahanGrid — Production Release Checklist
 
 > **Scope**: This checklist documents the verified pre-release state of the VahanGrid platform
 > as of the Phase 5C production readiness audit. Each item is sourced from actual code and
@@ -216,33 +216,37 @@ cd frontend && npm run build
 
 ---
 
-## 7. Regression Test Results (Phase 5C)
+## 7. Regression Test Results (Phase 5D)
 
-All test suites were executed against the local development stack as part of the Phase 5C audit:
+All test suites were executed against the local development stack as part of the Phase 5D audit:
 
-| Suite | File | Result |
-|-------|------|--------|
-| Phase 5A — Deployment Readiness | `test/test_phase5a.js` | PASS |
-| Phase 4F — Financial Ledger & Payments | `test/test_phase4f.js` | PASS |
-| Phase 4E — Driver Wallet & Topup | `test/test_phase4e.js` | PASS |
-| Phase 3G — OCPP Operations | `test/test_phase3g.js` | PASS |
-| Frontend Production Build | `frontend/` (`npm run build`) | PASS (0 warnings) |
+| Suite | File | Result | Count |
+|-------|------|--------|-------|
+| Phase 5D — Production Blocker Remediation | `test_phase5d.js` | ✅ PASS | 51/51 |
+| Phase 5A — Deployment Readiness & Observability | `test_phase5a.js` | ✅ PASS | 47/47 |
+| Phase 4F — Platform Security & Financial Integrity | `test_phase4f.js` | ✅ PASS | 52/52 |
+| Phase 4E — Operator Operations | `test_phase4e.js` | ✅ PASS | 42/42 |
+| Phase 3G — Unified Financial Activity & Wallet Hub | `test_phase3g.js` | ✅ PASS | 63/63 |
+| Frontend Production Build | `frontend/` (`npm run build`) | ✅ PASS | 0 warnings |
 
-These suites run against the local development database and OCPP simulator. Full end-to-end
-staging validation (Phase 5B) confirmed auth flows, charging session creation, CDR generation,
-and wallet operations against a live local database.
+**Phase 5D test coverage summary:**
+- **Section A**: Rate-limit headers verified on all protected endpoints (`/auth/login`, `/auth/register`, `/payments/webhook`, `/payments/orders`). Health probes confirmed NOT rate-limited.
+- **Section B**: Webhook hardening: missing signature (400), invalid HMAC (400), length-matching wrong signature (400), `payment.failed` event (200 `status:failed`), unknown event (200 `status:ignored`), first `order.paid` delivery (wallet credited, `already_processed: false`), second delivery (idempotent, `already_processed: true`), concurrent `Promise.all` delivery (exactly ONE credit via DB constraint).
+- **Section C**: `validateEnvironment()` rejects short secrets, placeholder secrets, non-Postgres URLs in production; accepts properly-configured environments. Seed guard exits 1 with security error message when `NODE_ENV=production`.
+- **Section D**: Phase 3G OCPP & financial regression re-run as subprocess — 63/63 passed.
 
 ---
 
 ## 8. Known Limitations & Open Items
 
-| # | Item | Severity | Recommended Action |
-|---|------|----------|--------------------|
-| 8.1 | No external staging environment is provisioned; staging ran locally | Medium | Provision a cloud staging environment before first public release |
-| 8.2 | Payment webhooks can only be tested with live or Razorpay test infrastructure | Medium | Use Razorpay webhook simulator or ngrok tunnel in staging |
-| 8.3 | OCPP hardware was simulated; real charger interoperability is untested | High | Test with at least one physical OCPP-compliant charger before go-live |
-| 8.4 | No WAL archiving or point-in-time recovery is configured locally | High | Enable WAL archiving or use a managed database with PITR for production |
-| 8.5 | No application-layer rate limiter on auth endpoints | Medium | Add `express-rate-limit` on auth endpoints as a defence-in-depth layer |
+| # | Item | Severity | Status | Recommended Action |
+|---|------|----------|--------|--------------------|
+| 8.1 | No external staging environment is provisioned; staging ran locally | Medium | **Open** | Provision a cloud staging environment before first public release |
+| 8.2 | Payment webhooks can only be tested with live or Razorpay test infrastructure | Medium | **Open** | Use Razorpay webhook simulator or ngrok tunnel in staging |
+| 8.3 | OCPP hardware was simulated; real charger interoperability is untested | High | **Open** | Test with at least one physical OCPP-compliant charger before go-live |
+| 8.4 | No WAL archiving or point-in-time recovery is configured locally | High | **Open** | Enable WAL archiving or use a managed database with PITR for production |
+| 8.5 | No application-layer rate limiter on auth endpoints | Medium | ✅ **Done** | Implemented via `express-rate-limit@7` in Phase 5D; all auth/payment/webhook endpoints covered |
+| 8.6 | In-memory rate limit store (MemoryStore) is per-process; not shared across multi-instance deployments | Low | **Open** | Replace with `rate-limit-redis` store when horizontally scaling |
 
 ---
 
@@ -257,5 +261,5 @@ and wallet operations against a live local database.
 
 ---
 
-*Generated during VahanGrid Phase 5C — Production Release Audit.*
+*Generated and updated during VahanGrid Phase 5D — Production Blocker Remediation Audit.*
 *See [`docs/DEPLOYMENT_AND_RECOVERY.md`](./DEPLOYMENT_AND_RECOVERY.md) for operational runbooks.*
