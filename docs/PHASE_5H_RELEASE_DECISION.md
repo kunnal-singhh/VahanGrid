@@ -1,4 +1,4 @@
-﻿# VahanGrid — Phase 5H: Release Decision & Pilot Readiness
+# VahanGrid — Phase 5H: Release Decision & Pilot Readiness
 
 > **Document type**: Release governance record
 > **Phase**: 5H — Release Decision & Pilot Readiness
@@ -35,8 +35,8 @@
 | A2. Frontend Dockerfile + NGINX (SPA fallback, immutable asset cache) | PASS | `test_phase5g.js` A5 — 3/3 checks | None | Low |
 | A3. Staging NGINX (TLS 1.2+1.3, HSTS, security headers, OCPP WS upgrade, no DB port) | PASS | `test_phase5g.js` A6 — 8/8 checks; `nginx/staging.conf` inspected Phase 5H | None | Low |
 | A4. Docker Compose (PostGIS 16, pg_isready, pgdata_staging, no host DB port, migration ordering) | PASS | `test_phase5g.js` A7 — 6/6 checks; `docker-compose.staging.yml` inspected Phase 5H | None | Low |
-| A5. docker compose config lint | NOT VERIFIED | Docker daemon not available in this environment | Run `docker compose -f docker-compose.staging.yml config` on target host | Medium |
-| A6. End-to-end containerised startup | BLOCKED | Requires Docker daemon and DNS/domain configuration | Provision staging host, inject secrets, run `docker compose up` | High |
+| A5. docker compose config lint | PASS | `docker compose -f docker-compose.staging.yml config` passes with exit code 0 (Docker Compose v5.1.4, Phase 6A audit) | None | Low |
+| A6. End-to-end containerised startup | BLOCKED | Requires active Docker daemon and cloud staging host | Provision staging host, inject secrets, run `docker compose up` | High |
 | A7. TLS certificate provisioning | BLOCKED | Requires domain control and Let's Encrypt or cloud ACM | Obtain cert; mount into `certs_staging` volume | High |
 | A8. OCPP WebSocket upgrade through NGINX proxy | PASS (config audit) | `nginx/staging.conf` L86-98: `Upgrade`, `Connection upgrade`, `proxy_read_timeout 3600s` confirmed | Functional end-to-end test after containerised deployment | Medium |
 | A9. Graceful shutdown on SIGTERM within 10s | PASS (code audit) | `src/server.js` closes HTTP, OCPP, DB pool with 10s watchdog; `DEPLOYMENT_AND_RECOVERY.md` §4 | Verify under container orchestration | Low |

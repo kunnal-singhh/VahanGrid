@@ -1,4 +1,4 @@
-﻿# VahanGrid — Pilot Runbook
+# VahanGrid — Pilot Runbook
 
 > **Document type**: Operational runbook
 > **Phase**: 5H — Release Decision & Pilot Readiness
@@ -66,6 +66,7 @@ Confirm all of the following before proceeding:
 
 ```bash
 # On the staging host — verify compose file is syntactically valid
+# (Verified offline in Phase 6A with Docker Compose v5.1.4: exits 0)
 docker compose -f docker-compose.staging.yml config
 
 # Expected: outputs resolved YAML with all variable substitutions; exits 0

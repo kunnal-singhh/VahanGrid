@@ -547,4 +547,58 @@ When authorized cloud access is provisioned, execute the following reproducible 
 
 ---
 
-*Last updated: 2026-10-15 — Phase 5F Cloud Staging Deployment & Integration Verification.*
+## 11. Phase 6A — Cloud Staging Readiness & Infrastructure Assessment (2026-10-15)
+
+### 11.1 Infrastructure Audit Findings
+
+In Phase 6A, an infrastructure discovery audit was executed to assess the feasibility of provisioning and deploying an isolated cloud staging environment:
+
+| Discovery Check | Result | Verification Detail | Status |
+|---|---|---|---|
+| **Docker Engine & CLI** | Partial | `docker.exe` v29.5.2 & Docker Compose v5.1.4 present. Local daemon (`dockerDesktopLinuxEngine`) stopped. | Offline validated |
+| **Compose Configuration Spec** | PASS | `docker compose -f docker-compose.staging.yml config` validated without daemon (exit code 0). | PASS |
+| **AWS Cloud Identity** | No Access | `aws sts get-caller-identity` returned `InvalidClientTokenId`. No valid AWS session or credentials. | BLOCKED |
+| **Alternative Cloud CLIs** | Not Installed | `gcloud`, `az`, `doctl`, `flyctl` not present in PATH; no cloud credentials available. | BLOCKED |
+| **SSH Host / Keys** | Not Configured | `~/.ssh/config` absent. No staging jump-host or remote server connection configured. | BLOCKED |
+| **Remote Staging Deployment** | BLOCKED | Cannot provision cloud resources or modify DNS without credentials or authorized billing. | BLOCKED |
+
+### 11.2 Local Architecture & Staging Stack Verification
+
+While external cloud provisioning remains blocked pending credentials, all local staging components were verified:
+
+1. **Docker Compose Topology**:
+   - `docker compose -f docker-compose.staging.yml config` parsed cleanly.
+   - 4 services (`db`, `migration`, `backend`, `reverse-proxy`) with strict dependency chaining (`db: service_healthy` → `migration: service_completed_successfully` → `backend: service_started`).
+   - PostGIS 16 alpine image, non-root backend user (`vahangrid`), and internal bridge network with no external host exposure for PostgreSQL port 5432.
+2. **Three-Tier Health Probes**:
+   - `GET /health/liveness` -> HTTP 200 `{"status":"ok","service":"VahanGrid API"}`
+   - `GET /health/readiness` -> HTTP 200 `{"status":"ready","database":"connected"}`
+   - `GET /health` -> HTTP 200 `{"success":true,"status":"healthy","database":"connected","postgis":"enabled"}`
+3. **Database Migration State**:
+   - `node src/scripts/migrate.js` confirmed all 22 sequential migrations applied.
+4. **Frontend Production Build**:
+   - `npm run build` completed cleanly in 9.69s (1960 modules transformed, production bundles output to `dist/`).
+5. **Regression Verification Suites**:
+   - Phase 5G (`test_phase5g.js`): 104/104 passed.
+   - Phase 5F (`test_phase5f.js`): 53/53 passed.
+   - Phase 5E (`test_phase5e.js`): 59/59 passed.
+
+### 11.3 Prerequisites for External Cloud Staging Launch
+
+To transition staging from **BLOCKED** to **ACTIVE**, an authorized operator must supply:
+1. **Target Cloud Node**: Linux VM (Ubuntu 22.04 LTS / Debian 12 / Amazon Linux 2023, >=2 vCPU, >=4GB RAM) with Docker Engine and Compose v2.
+2. **Public DNS Record**: Point `staging.vahangrid.internal` (or public subdomain) A-record to the VM public IP.
+3. **TLS Certificate**: Obtain via Let's Encrypt Certbot (`certbot certonly --standalone -d <subdomain>`) and bind-mount into `./nginx/certs/staging.crt` and `./nginx/certs/staging.key`.
+4. **Staging Environment Variables (`.env.staging`)**:
+   - `DATABASE_URL=postgresql://vahangrid_admin:<random_password>@db:5432/vahangrid_staging`
+   - `JWT_SECRET=<random_hex_at_least_64_chars>`
+   - `FRONTEND_URL=https://<staging_domain>`
+   - `PAYMENT_KEY_ID=rzp_test_<id>`
+   - `PAYMENT_KEY_SECRET=<secret>`
+   - `PAYMENT_WEBHOOK_SECRET=<secret>`
+   - `TRUST_PROXY=1`
+   - `NODE_ENV=production`
+
+---
+
+*Last updated: 2026-10-15 — Phase 6A Cloud Staging Deployment & Verification Audit.*
