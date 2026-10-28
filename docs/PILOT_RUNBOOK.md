@@ -47,7 +47,8 @@ Confirm all of the following before proceeding:
 - [ ] All four roles in `docs/PRODUCTION_RELEASE_CHECKLIST.md` §9 have signed off
 - [ ] `docs/PHASE_5H_RELEASE_DECISION.md` has been reviewed and accepted
 - [ ] Staging host is provisioned with Docker + Compose v2 installed
-- [ ] TLS certificate is mounted and valid for the staging domain
+- [ ] TLS certificate is loaded into `certs_staging` named volume (`staging.crt` and `staging.key`)
+- [ ] All 5 services in `docker-compose.staging.yml` verified (`db`, `migration`, `backend`, `frontend`, `reverse-proxy`)
 - [ ] All secrets are injected via environment (never committed to git):
   - `STAGING_DB_PASSWORD` (strong random string)
   - `STAGING_JWT_SECRET` (>=32 random chars, no placeholder words)
@@ -66,10 +67,10 @@ Confirm all of the following before proceeding:
 
 ```bash
 # On the staging host — verify compose file is syntactically valid
-# (Verified offline in Phase 6A with Docker Compose v5.1.4: exits 0)
+# (Verified offline in Phase 6A & 6B with Docker Compose v5.1.4: exits 0)
 docker compose -f docker-compose.staging.yml config
 
-# Expected: outputs resolved YAML with all variable substitutions; exits 0
+# Expected: outputs resolved YAML with all 5 services; exits 0
 ```
 
 ### 1.2 Port audit

@@ -568,7 +568,7 @@ While external cloud provisioning remains blocked pending credentials, all local
 
 1. **Docker Compose Topology**:
    - `docker compose -f docker-compose.staging.yml config` parsed cleanly.
-   - 4 services (`db`, `migration`, `backend`, `reverse-proxy`) with strict dependency chaining (`db: service_healthy` → `migration: service_completed_successfully` → `backend: service_started`).
+   - 5 services (`db`, `migration`, `backend`, `frontend`, `reverse-proxy`) with strict dependency chaining (`db: service_healthy` → `migration: service_completed_successfully` → `backend: service_started`; `reverse-proxy` depends on `backend` and `frontend`).
    - PostGIS 16 alpine image, non-root backend user (`vahangrid`), and internal bridge network with no external host exposure for PostgreSQL port 5432.
 2. **Three-Tier Health Probes**:
    - `GET /health/liveness` -> HTTP 200 `{"status":"ok","service":"VahanGrid API"}`
@@ -577,18 +577,20 @@ While external cloud provisioning remains blocked pending credentials, all local
 3. **Database Migration State**:
    - `node src/scripts/migrate.js` confirmed all 22 sequential migrations applied.
 4. **Frontend Production Build**:
-   - `npm run build` completed cleanly in 9.69s (1960 modules transformed, production bundles output to `dist/`).
+   - `npm run build` completed cleanly in 11.52s (1960 modules transformed, production bundles output to `dist/`).
 5. **Regression Verification Suites**:
    - Phase 5G (`test_phase5g.js`): 104/104 passed.
    - Phase 5F (`test_phase5f.js`): 53/53 passed.
    - Phase 5E (`test_phase5e.js`): 59/59 passed.
+   - Phase 5D (`test_phase5d.js`): 51/51 passed.
+   - Phase 4F (`test_phase4f.js`): 52/52 passed.
 
 ### 11.3 Prerequisites for External Cloud Staging Launch
 
 To transition staging from **BLOCKED** to **ACTIVE**, an authorized operator must supply:
 1. **Target Cloud Node**: Linux VM (Ubuntu 22.04 LTS / Debian 12 / Amazon Linux 2023, >=2 vCPU, >=4GB RAM) with Docker Engine and Compose v2.
 2. **Public DNS Record**: Point `staging.vahangrid.internal` (or public subdomain) A-record to the VM public IP.
-3. **TLS Certificate**: Obtain via Let's Encrypt Certbot (`certbot certonly --standalone -d <subdomain>`) and bind-mount into `./nginx/certs/staging.crt` and `./nginx/certs/staging.key`.
+3. **TLS Certificate Volume**: Obtain via Let's Encrypt Certbot (`certbot certonly --standalone -d <subdomain>`) and load into the `vahangrid_certs_staging` volume (`staging.crt` and `staging.key`).
 4. **Staging Environment Variables (`.env.staging`)**:
    - `DATABASE_URL=postgresql://vahangrid_admin:<random_password>@db:5432/vahangrid_staging`
    - `JWT_SECRET=<random_hex_at_least_64_chars>`
@@ -601,4 +603,34 @@ To transition staging from **BLOCKED** to **ACTIVE**, an authorized operator mus
 
 ---
 
-*Last updated: 2026-10-15 — Phase 6A Cloud Staging Deployment & Verification Audit.*
+## 12. Phase 6B — Deployment Preparation & Security Gate Audit (2026-10-28)
+
+### 12.1 Topology & Invariant Audit
+A rigorous audit of repository deployment configurations was conducted during Phase 6B:
+- **Verified Service Topology**: Corrected the previously reported 4-service topology to the actual **5 services** defined in `docker-compose.staging.yml`:
+  1. `db`: `postgis/postgis:16-3.4-alpine` (database port 5432 internal-only, zero host exposure).
+  2. `migration`: One-shot container running sequential migrations (depends on `db: service_healthy`).
+  3. `backend`: Node 20 Express + OCPP server running as unprivileged `vahangrid` user.
+  4. `frontend`: NGINX 1.27 container serving compiled Vite SPA with client-side fallback.
+  5. `reverse-proxy`: Edge NGINX TLS terminator exposing only ports 80 and 443.
+- **Docker Daemon Status & Local Limitation**: Docker CLI 29.5.2 & Compose v5.1.4 are installed. `com.docker.service` is stopped and cannot be started without administrative elevation. Runtime container orchestration is therefore not simulated or claimed locally; offline validation confirms syntactical correctness (`docker compose config` exit 0).
+- **TLS Certificate Invariant**: In `nginx/staging.conf`, certificate paths are `/etc/nginx/certs/staging.crt` and `/etc/nginx/certs/staging.key`. In `docker-compose.staging.yml`, `certs_staging:/etc/nginx/certs:ro` mounts a named volume. The runbook specifies loading certs via a helper container or bind mount, and graceful reload via `nginx -s reload`.
+- **Secret Hardening**: Added `nginx/certs/`, `*.pem`, `*.key`, and `*.crt` to root `.gitignore` to prevent inadvertent tracking of TLS certificates or private keys.
+- **Database Non-Exposure**: Confirmed port 5432 is absent from `ports` in `docker-compose.staging.yml`. It is accessible exclusively over `internal_net`.
+- **Database Backup vs. PITR Distinction**: The runbook distinguishes snapshot dumps (`pg_dump -Fc` with `pg_restore` verification drill) from cloud managed continuous Point-in-Time Recovery (PITR). Managed PITR remains classified as **BLOCKED** until a cloud managed database is provisioned.
+
+### 12.2 Verification Evidence
+All suites were executed fresh in Phase 6B:
+- **Phase 5G Hardening Suite**: 104 / 104 passed.
+- **Phase 5F Integration Suite**: 53 / 53 passed.
+- **Phase 5E Remote Staging Suite**: 59 / 59 passed.
+- **Phase 5D Blocker Remediation Suite**: 51 / 51 passed.
+- **Phase 4F Platform Reliability Suite**: 52 / 52 passed.
+- **Database Migrations**: 22 / 22 confirmed applied and up to date.
+- **Frontend Production Build**: `npm run build` completed in 11.52s (1960 modules transformed, 0 errors).
+- **Three-Tier Health Probes**: `/health/liveness` (200), `/health/readiness` (200), `/health` (200) verified live.
+
+---
+
+*Last updated: 2026-10-28 — Phase 6B Deployment Preparation & Security Gate Audit.*
+

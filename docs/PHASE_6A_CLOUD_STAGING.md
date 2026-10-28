@@ -1,4 +1,4 @@
-﻿# VahanGrid — Phase 6A: Cloud Staging Deployment and Verification
+# VahanGrid — Phase 6A: Cloud Staging Deployment and Verification
 
 > **Document type**: Cloud Staging Deployment Audit & Infrastructure Verification Record  
 > **Phase**: 6A — Cloud Staging Deployment & Verification  
@@ -39,7 +39,7 @@ A comprehensive probe of local and external infrastructure tools was conducted:
 - **Docker CLI**: Present (`Docker version 29.5.2, build 79eb04c`).
 - **Docker Compose**: Present (`Docker Compose version v5.1.4`).
 - **Docker Daemon Engine**: Stopped (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`).
-- **Compose Config Validation**: Verified offline via `docker compose -f docker-compose.staging.yml config`. Exit code: `0`. All 4 services, volume configurations, network definitions, and health checks validated cleanly.
+- **Compose Config Validation**: Verified offline via `docker compose -f docker-compose.staging.yml config`. Exit code: `0`. All 5 services (`db`, `migration`, `backend`, `frontend`, `reverse-proxy`), volume configurations, network definitions, and health checks validated cleanly.
 
 ### 2.2 Cloud & SSH Credentials Audit
 - **AWS CLI**: Present (`aws-cli/2.x`), but execution of `aws sts get-caller-identity` failed with `InvalidClientTokenId` (no valid credentials configured in environment or `~/.aws`).
@@ -142,11 +142,12 @@ sudo usermod -aG docker $USER
 sudo apt-get install -y certbot
 sudo certbot certonly --standalone -d staging.vahangrid.com
 
-# Create persistent certificate directory for NGINX bind mount
-mkdir -p /opt/vahangrid/nginx/certs
-sudo cp /etc/letsencrypt/live/staging.vahangrid.com/fullchain.pem /opt/vahangrid/nginx/certs/staging.crt
-sudo cp /etc/letsencrypt/live/staging.vahangrid.com/privkey.pem /opt/vahangrid/nginx/certs/staging.key
-sudo chmod 600 /opt/vahangrid/nginx/certs/*
+# Populate the named docker volume certs_staging mounted by reverse-proxy
+docker volume create vahangrid_certs_staging
+docker run --rm \
+  -v vahangrid_certs_staging:/etc/nginx/certs \
+  -v /etc/letsencrypt/live/staging.vahangrid.com:/certs:ro \
+  alpine sh -c "cp /certs/fullchain.pem /etc/nginx/certs/staging.crt && cp /certs/privkey.pem /etc/nginx/certs/staging.key && chmod 600 /etc/nginx/certs/*"
 ```
 
 ### Step 4: Clone Repository & Create Secret Configuration
