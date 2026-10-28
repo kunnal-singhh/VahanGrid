@@ -587,3 +587,4 @@ Complete before declaring the pilot successful:
 *See [`docs/PHASE_5H_RELEASE_DECISION.md`](./PHASE_5H_RELEASE_DECISION.md) for the full release evidence matrix.*
 *See [`docs/DEPLOYMENT_AND_RECOVERY.md`](./DEPLOYMENT_AND_RECOVERY.md) for detailed infrastructure procedures.*
 *See [`docs/PHASE_6C_STAGING_DEPLOYMENT_PLAN.md`](./PHASE_6C_STAGING_DEPLOYMENT_PLAN.md) for provider evaluation and remote deployment plan.*
+*See [`docs/PHASE_6D_ZERO_COST_PLAN.md`](./PHASE_6D_ZERO_COST_PLAN.md) for zero-cost testing, CI workflows, and demonstration architecture.*

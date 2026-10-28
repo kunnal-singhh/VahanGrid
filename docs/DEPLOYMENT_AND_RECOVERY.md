@@ -632,6 +632,26 @@ All suites were executed fresh in Phase 6B:
 
 ---
 
-*Last updated: 2026-10-28 — Phase 6B Deployment Preparation & Security Gate Audit.*
-*See [`docs/PHASE_6C_STAGING_DEPLOYMENT_PLAN.md`](./PHASE_6C_STAGING_DEPLOYMENT_PLAN.md) for provider evaluation and remote deployment readiness plan.*
+## 13. Phase 6D — Zero-Cost Architecture & Continuous Integration (2026-10-28)
+
+### 13.1 Strict Zero-Cost Policy (₹0 Budget)
+In Phase 6D, a sustainable zero-cost architecture was established to maximize project demonstrability and code quality without incurring any cloud expenses:
+1. **Zero-Spend Mandate**: ₹0 budget strictly enforced. No cloud VMs, paid databases, or paid domain registrations.
+2. **No Credit Card Requirement**: Services requiring credit cards for free-tier signup (such as Fly.io or AWS pay-as-you-go) were disqualified to eliminate the risk of surprise billing.
+3. **Decoupled Architecture**:
+   - **Public Frontend Showcase**: Static React SPA deployed to verified free-tier CDN hosting (Cloudflare Pages or Netlify) using [`frontend/public/_redirects`](../frontend/public/_redirects) for client-side routing.
+   - **Automated CI/CD**: GitHub Actions workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) executing on Ubuntu runners with `postgis/postgis:16-3.4-alpine` service containers for continuous regression validation on pushes and pull requests.
+   - **Core Engine & OCPP WebSocket Gateway**: Retained on local development environment (or local Docker Compose stack) to prevent charger connection drops caused by sleeping free-tier cloud PaaS platforms.
+   - **Optional Remote Demo Tunnel**: Zero-cost, zero-config Cloudflare Tunnel (`cloudflared tunnel --url http://localhost:3001`) to securely expose the local backend and OCPP gateway for live demonstrations.
+
+### 13.2 Free Tier Inactivity & Limitations Matrix
+- **Render / Koyeb Free Tiers**: Services sleep after 15 minutes of inactivity; cold starts take 50+ seconds. **Unsuitable for persistent OCPP 2.0.1 charge point heartbeats**.
+- **Supabase Free Tier**: Databases pause after 7 days of inactivity. Unsuitable as an authoritative financial ledger without backups.
+- **Local Engine**: Authoritative, persistent, zero-cost, and immune to sleeping policies.
+
+---
+
+*Last updated: 2026-10-28 — Phase 6D Zero-Cost Architecture & CI Integration.*
+*See [`docs/PHASE_6D_ZERO_COST_PLAN.md`](./PHASE_6D_ZERO_COST_PLAN.md) for full zero-cost comparative analysis and setup instructions.*
+
 
