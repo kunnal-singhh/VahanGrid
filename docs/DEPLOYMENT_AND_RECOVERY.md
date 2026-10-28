@@ -633,4 +633,5 @@ All suites were executed fresh in Phase 6B:
 ---
 
 *Last updated: 2026-10-28 — Phase 6B Deployment Preparation & Security Gate Audit.*
+*See [`docs/PHASE_6C_STAGING_DEPLOYMENT_PLAN.md`](./PHASE_6C_STAGING_DEPLOYMENT_PLAN.md) for provider evaluation and remote deployment readiness plan.*
 
