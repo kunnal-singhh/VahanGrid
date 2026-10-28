@@ -1,4 +1,4 @@
-﻿name: VahanGrid CI
+name: VahanGrid CI
 
 on:
   push:
@@ -43,6 +43,21 @@ jobs:
       - name: Install Backend Dependencies
         working-directory: backend
         run: npm ci
+
+      - name: Create CI .env
+        working-directory: backend
+        run: |
+          printf '%s\n' \
+            'DATABASE_URL=postgresql://vahangrid_user:ci_test_password_for_isolated_runner_only@localhost:5432/vahangrid_ci' \
+            'JWT_SECRET=ci_jwt_secret_must_be_minimum_32_characters_long_random_hex' \
+            'JWT_EXPIRES_IN=7d' \
+            'NODE_ENV=development' \
+            'PORT=3001' \
+            'PAYMENT_KEY_ID=rzp_test_ci' \
+            'PAYMENT_KEY_SECRET=ci_test_payment_secret' \
+            'PAYMENT_WEBHOOK_SECRET=ci_test_webhook_secret' \
+            'FRONTEND_URL=http://localhost:5173' \
+            > .env
 
       - name: Run Database Migrations
         working-directory: backend
